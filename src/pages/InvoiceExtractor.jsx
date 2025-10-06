@@ -4,6 +4,8 @@ import * as XLSX from 'xlsx';
 import FileUpload from '../components/FileUpload';
 import DataTable from '../components/DataTable';
 import TotalsSummary from '../components/TotalsSummary';
+import { API_URL } from '../config/api';
+
 
 function InvoiceExtractor({ user, onLogout }) {
   const [file, setFile] = useState(null);
@@ -49,7 +51,7 @@ function InvoiceExtractor({ user, onLogout }) {
     formData.append('pdf', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/process-pdf', {
+      const response = await fetch(`${API_URL}/api/process-pdf`, {
         method: 'POST',
         body: formData,
       });

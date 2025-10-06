@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { API_URL } from '../config/api';
 
 function Login() {
   const [searchParams] = useSearchParams();
@@ -13,7 +14,7 @@ function Login() {
   }, [error]);
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:5000/api/auth/google';
+    window.location.href = `${API_URL}/api/auth/google`;
   };
 
   const closeError = () => {
@@ -38,10 +39,7 @@ function Login() {
               Only users with @gncgroup.ca email addresses are allowed to access this system.
             </p>
             <div className="flex justify-end">
-              <button
-                onClick={closeError}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
+              <button onClick={closeError} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
                 Try Again
               </button>
             </div>
@@ -51,10 +49,7 @@ function Login() {
 
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
         <h1 className="text-2xl font-bold text-center mb-6">GNC Group Login</h1>
-        <button
-          onClick={handleGoogleLogin}
-          className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-        >
+        <button onClick={handleGoogleLogin} className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
           Login with Google
         </button>
         <p className="text-sm text-gray-600 text-center mt-4">

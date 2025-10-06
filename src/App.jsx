@@ -4,6 +4,7 @@ import axios from 'axios';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import InvoiceExtractor from './pages/InvoiceExtractor';
+import { API_URL } from './config/api';
 
 axios.defaults.withCredentials = true;
 
@@ -18,7 +19,7 @@ function App() {
 
   const checkAuth = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/auth/status');
+      const response = await axios.get(`${API_URL}/api/auth/status`);
       if (response.data.isAuthenticated) {
         setUser(response.data.user);
       }
@@ -30,7 +31,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await axios.post('http://localhost:5000/api/auth/logout');
+      await axios.post(`${API_URL}/api/auth/logout`);
       setUser(null);
       navigate('/login');
     } catch (error) {
