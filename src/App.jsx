@@ -1,56 +1,68 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import api from './config/api';
 import Login from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import InvoiceExtractor from './pages/InvoiceExtractor';
-import { API_URL } from './config/api';
-
-axios.defaults.withCredentials = true;
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-
-
-    fetch('https://srv1047946.hstgr.cloud:5000/api/auth/status', {
-  credentials: 'include'
-})
-.then(r => r.json())
-.then(d => console.log('✅ Auth Status:', d))
-.catch(e => console.error('❌ Auth Error:', e))
+    // Don't check auth on callback page - let AuthCallback handle it
+    if (location.pathname === '/auth/callback') {
+      setLoading(false);
+      return;
+    }
     checkAuth();
-  }, []);
+  }, [location.pathname]);
 
   const checkAuth = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/auth/status`);
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      const response = await api.get('/api/auth/status');
       if (response.data.isAuthenticated) {
         setUser(response.data.user);
+      } else {
+        localStorage.removeItem('authToken');
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+      localStorage.removeItem('authToken');
     }
     setLoading(false);
   };
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API_URL}/api/auth/logout`);
+      await api.post('/api/auth/logout');
+      localStorage.removeItem('authToken');
       setUser(null);
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
+      localStorage.removeItem('authToken');
+      setUser(null);
+      navigate('/login');
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -60,6 +72,10 @@ function App() {
       <Route 
         path="/login" 
         element={user ? <Navigate to="/dashboard" /> : <Login />} 
+      />
+      <Route 
+        path="/auth/callback" 
+        element={<AuthCallback onAuthSuccess={checkAuth} />} 
       />
       <Route 
         path="/dashboard" 
