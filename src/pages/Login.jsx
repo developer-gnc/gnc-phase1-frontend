@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_URL } from '../config/api';
 
 function Login() {
+  const [searchParams] = useSearchParams();
   const [showError, setShowError] = useState(false);
-  
-  // Simulating the router functionality for demo
+  const error = searchParams.get('error');
+
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const error = urlParams.get('error');
     if (error === 'domain_not_allowed') {
       setShowError(true);
     }
-  }, []);
+  }, [error]);
 
   const handleGoogleLogin = () => {
-    // Replace with your actual API_URL
-    window.location.href = `YOUR_API_URL/api/auth/google`;
+    window.location.href = `${API_URL}/api/auth/google`;
   };
 
   const closeError = () => {
@@ -27,79 +27,26 @@ function Login() {
     <div className="min-h-screen relative overflow-hidden bg-black">
       {/* Navbar */}
       <motion.nav
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-20 bg-gradient-to-b from-zinc-900 to-black border-b border-zinc-800 shadow-2xl"
-        style={{
-          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.05)'
-        }}
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="relative z-20 bg-black border-b border-zinc-800"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center"
-          >
+          <div className="flex items-center">
             <img 
               src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png" 
               alt="GNC Group Logo" 
               className="h-10 sm:h-12 w-auto"
             />
-          </motion.div>
+          </div>
         </div>
       </motion.nav>
 
-      {/* 3D Animated Background Elements */}
-      <motion.div
-        className="absolute top-20 left-0 w-72 sm:w-96 h-72 sm:h-96 bg-gradient-to-br from-zinc-700 to-zinc-900 rounded-full filter blur-3xl opacity-20"
-        animate={{
-          x: [0, 100, 0],
-          y: [0, 50, 0],
-          scale: [1, 1.2, 1],
-        }}
-        transition={{
-          duration: 20,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        style={{
-          boxShadow: '0 20px 60px rgba(255, 255, 255, 0.1)'
-        }}
-      />
-      <motion.div
-        className="absolute bottom-0 right-0 w-72 sm:w-96 h-72 sm:h-96 bg-gradient-to-tl from-zinc-700 to-zinc-900 rounded-full filter blur-3xl opacity-20"
-        animate={{
-          x: [0, -100, 0],
-          y: [0, -50, 0],
-          scale: [1, 1.3, 1],
-        }}
-        transition={{
-          duration: 15,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        style={{
-          boxShadow: '0 20px 60px rgba(255, 255, 255, 0.1)'
-        }}
-      />
-      <motion.div
-        className="absolute top-1/2 left-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-gradient-to-br from-zinc-600 to-zinc-800 rounded-full filter blur-3xl opacity-20"
-        animate={{
-          x: [-50, 50, -50],
-          y: [-50, 50, -50],
-          scale: [1, 1.1, 1],
-        }}
-        transition={{
-          duration: 18,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        style={{
-          boxShadow: '0 20px 60px rgba(255, 255, 255, 0.1)'
-        }}
-      />
+      {/* Animated Background Elements */}
+      <div className="absolute top-20 left-0 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-800 rounded-full filter blur-3xl opacity-20 animate-pulse" />
+      <div className="absolute bottom-0 right-0 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-800 rounded-full filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '1s' }} />
+      <div className="absolute top-1/2 left-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-700 rounded-full filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }} />
 
       {/* Error Modal */}
       <AnimatePresence>
@@ -108,64 +55,35 @@ function Login() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-md px-4"
-            onClick={closeError}
+            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-sm px-4"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", duration: 0.5 }}
-              className="bg-gradient-to-br from-zinc-900 to-black p-6 sm:p-8 rounded-3xl shadow-2xl max-w-md mx-4 border border-zinc-800 w-full"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 p-6 sm:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-zinc-800"
               onClick={(e) => e.stopPropagation()}
-              style={{
-                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 80px rgba(0, 0, 0, 0.8)',
-                transform: 'perspective(1000px) rotateX(2deg)'
-              }}
             >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                className="flex items-center mb-6"
-              >
-                <div className="bg-red-500 bg-opacity-20 p-3 rounded-2xl mr-4 border border-red-500 border-opacity-30"
-                  style={{
-                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                  }}
-                >
+              <div className="flex items-center mb-6">
+                <div className="bg-red-900 bg-opacity-30 p-3 rounded-xl mr-4 border border-red-800">
                   <svg className="w-6 sm:w-7 h-6 sm:h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                   </svg>
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-white">Access Denied</h3>
-              </motion.div>
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                className="text-gray-400 mb-8 leading-relaxed text-sm sm:text-base"
-              >
+              </div>
+              <p className="text-gray-400 mb-8 leading-relaxed text-sm sm:text-base">
                 Only users with <span className="font-semibold text-white">@gncgroup.ca</span> email addresses are allowed to access this system.
-              </motion.p>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="flex justify-end"
-              >
-                <motion.button
-                  whileHover={{ scale: 1.05, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
+              </p>
+              <div className="flex justify-end">
+                <button
                   onClick={closeError}
-                  className="bg-gradient-to-br from-zinc-700 to-zinc-800 text-white px-6 py-3 rounded-xl font-semibold border border-zinc-700"
-                  style={{
-                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 15px rgba(255, 255, 255, 0.05)'
-                  }}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-semibold border border-zinc-700 transition-colors"
                 >
                   Try Again
-                </motion.button>
-              </motion.div>
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -174,45 +92,29 @@ function Login() {
       {/* Main Content */}
       <div className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4 sm:px-6 lg:px-8 py-8">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-          className="relative z-10 bg-gradient-to-br from-zinc-900 to-black p-8 sm:p-12 rounded-3xl shadow-2xl w-full max-w-md border border-zinc-800"
-          style={{
-            boxShadow: '0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 80px rgba(0, 0, 0, 0.8)',
-            transform: 'perspective(1000px) rotateX(2deg)'
-          }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="relative z-10 bg-zinc-900 p-8 sm:p-12 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-800"
         >
           {/* Logo Section */}
           <motion.div
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ delay: 0.4, type: "spring", stiffness: 150, damping: 15 }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
             className="flex justify-center mb-8"
           >
-            <motion.div
-              whileHover={{ scale: 1.05, rotateY: 5 }}
-              transition={{ type: "spring", stiffness: 300 }}
-              style={{
-                transform: 'perspective(1000px) rotateX(-5deg)',
-                transformStyle: 'preserve-3d'
-              }}
-            >
-              <img 
-                src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png" 
-                alt="GNC Group Logo" 
-                className="h-20 sm:h-24 w-auto"
-                style={{
-                  filter: 'drop-shadow(0 10px 30px rgba(255, 255, 255, 0.1))'
-                }}
-              />
-            </motion.div>
+            <img 
+              src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png" 
+              alt="GNC Group Logo" 
+              className="h-20 sm:h-24 w-auto"
+            />
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 0.3 }}
             className="text-center mb-10"
           >
             <h1 className="text-2xl sm:text-3xl font-bold mb-3 text-white">
@@ -225,19 +127,15 @@ function Login() {
 
           {/* Google Login Button */}
           <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            whileHover={{ scale: 1.02, y: -3 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleGoogleLogin}
-            className="w-full bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-zinc-700 text-white py-4 px-6 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3 group"
-            style={{
-              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 15px rgba(255, 255, 255, 0.05)',
-              transform: 'perspective(1000px) translateZ(10px)'
-            }}
+            className="w-full bg-zinc-800 hover:bg-zinc-700 border-2 border-zinc-700 hover:border-zinc-600 text-white py-4 px-6 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3"
           >
-            <svg className="w-5 sm:w-6 h-5 sm:h-6 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+            <svg className="w-5 sm:w-6 h-5 sm:h-6" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -250,7 +148,7 @@ function Login() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
+            transition={{ delay: 0.5 }}
             className="my-8 flex items-center"
           >
             <div className="flex-1 border-t border-zinc-800"></div>
@@ -262,12 +160,8 @@ function Login() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700 rounded-xl p-4"
-            style={{
-              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-              transform: 'perspective(1000px) translateZ(5px)'
-            }}
+            transition={{ delay: 0.6 }}
+            className="bg-zinc-800 border border-zinc-700 rounded-xl p-4"
           >
             <div className="flex items-start space-x-3">
               <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
