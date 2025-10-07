@@ -14,6 +14,14 @@ function App() {
   const navigate = useNavigate();
 
   useEffect(() => {
+
+
+    fetch('https://srv1047946.hstgr.cloud:5000/api/auth/status', {
+  credentials: 'include'
+})
+.then(r => r.json())
+.then(d => console.log('✅ Auth Status:', d))
+.catch(e => console.error('❌ Auth Error:', e))
     checkAuth();
   }, []);
 
