@@ -43,11 +43,6 @@ function Login() {
         </div>
       </motion.nav>
 
-      {/* Animated Background Elements */}
-      <div className="absolute top-20 left-0 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-800 rounded-full filter blur-3xl opacity-20 animate-pulse" />
-      <div className="absolute bottom-0 right-0 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-800 rounded-full filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '1s' }} />
-      <div className="absolute top-1/2 left-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-zinc-700 rounded-full filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }} />
-
       {/* Error Modal */}
       <AnimatePresence>
         {showError && (

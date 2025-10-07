@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import FileUpload from '../components/FileUpload';
 import DataTable from '../components/DataTable';
 import TotalsSummary from '../components/TotalsSummary';
 import { API_URL } from '../config/api';
-
 
 function InvoiceExtractor({ user, onLogout }) {
   const [file, setFile] = useState(null);
@@ -323,33 +323,47 @@ function InvoiceExtractor({ user, onLogout }) {
   const totals = calculateGrandTotals();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
-      <div className="bg-white shadow mb-4">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold">GNC Group</h1>
-            <nav className="flex gap-4">
-              <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 font-medium">
-                Dashboard
-              </Link>
-              <Link to="/invoice-extractor" className="text-gray-600 hover:text-gray-900 font-medium">
-                Invoice Extractor
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user.email}</span>
-            <button
-              onClick={onLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-            >
-              Logout
-            </button>
+    <div className="min-h-screen bg-black">
+      {/* Navbar */}
+      <nav className="bg-black border-b border-zinc-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-6">
+              <img 
+                src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png" 
+                alt="GNC Group Logo" 
+                className="h-10 sm:h-12 w-auto"
+              />
+              <div className="hidden md:flex gap-4">
+                <Link 
+                  to="/dashboard" 
+                  className="text-gray-400 hover:text-white font-medium transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <Link 
+                  to="/invoice-extractor" 
+                  className="text-white font-medium"
+                >
+                  Invoice Extractor
+                </Link>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-400 hidden sm:block">{user.email}</span>
+              <button
+                onClick={onLogout}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-zinc-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </nav>
 
-      <div className="max-w-7xl mx-auto">
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <FileUpload
           file={file}
           loading={loading}
@@ -362,19 +376,24 @@ function InvoiceExtractor({ user, onLogout }) {
         />
 
         {collectedResult && (
-          <div className="bg-white rounded-lg shadow-xl p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Extracted Data</h2>
-              <div className="flex gap-3">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-xl mt-6"
+          >
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <h2 className="text-2xl font-bold text-white">Extracted Data</h2>
+              <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={downloadJSON}
-                  className="bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                  className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
                 >
                   Download JSON
                 </button>
                 <button
                   onClick={downloadExcel}
-                  className="bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
                 >
                   Download Excel
                 </button>
@@ -382,7 +401,7 @@ function InvoiceExtractor({ user, onLogout }) {
             </div>
 
             <div className="mb-6 flex items-center gap-4 flex-wrap">
-              <div className="flex bg-gray-100 rounded-lg p-1">
+              <div className="flex bg-zinc-800 rounded-lg p-1">
                 <button
                   onClick={() => {
                     setViewMode('collected');
@@ -391,8 +410,8 @@ function InvoiceExtractor({ user, onLogout }) {
                   }}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                     viewMode === 'collected'
-                      ? 'bg-white text-indigo-600 shadow'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-zinc-700 text-white shadow'
+                      : 'text-gray-400 hover:text-white'
                   }`}
                 >
                   All Pages Combined
@@ -401,8 +420,8 @@ function InvoiceExtractor({ user, onLogout }) {
                   onClick={() => setViewMode('individual')}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                     viewMode === 'individual'
-                      ? 'bg-white text-indigo-600 shadow'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-zinc-700 text-white shadow'
+                      : 'text-gray-400 hover:text-white'
                   }`}
                 >
                   Individual Pages
@@ -414,7 +433,7 @@ function InvoiceExtractor({ user, onLogout }) {
                   <select
                     value={selectedPage}
                     onChange={(e) => setSelectedPage(Number(e.target.value))}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="px-4 py-2 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {allPagesData.map(page => (
                       <option key={page.pageNumber} value={page.pageNumber}>
@@ -428,7 +447,7 @@ function InvoiceExtractor({ user, onLogout }) {
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       showImage
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        : 'bg-zinc-800 text-gray-400 hover:text-white border border-zinc-700'
                     }`}
                   >
                     {showImage ? 'Hide' : 'Show'} Image
@@ -439,7 +458,7 @@ function InvoiceExtractor({ user, onLogout }) {
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       showRaw
                         ? 'bg-purple-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        : 'bg-zinc-800 text-gray-400 hover:text-white border border-zinc-700'
                     }`}
                   >
                     {showRaw ? 'Hide' : 'Show'} Raw Output
@@ -450,15 +469,15 @@ function InvoiceExtractor({ user, onLogout }) {
 
             {selectedRowImage && (
               <div 
-                className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+                className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
                 onClick={() => setSelectedRowImage(null)}
               >
-                <div className="bg-white rounded-lg max-w-5xl max-h-full overflow-auto p-4">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl max-h-full overflow-auto p-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Page Reference</h3>
+                    <h3 className="text-xl font-bold text-white">Page Reference</h3>
                     <button
                       onClick={() => setSelectedRowImage(null)}
-                      className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
                     >
                       Close
                     </button>
@@ -466,27 +485,27 @@ function InvoiceExtractor({ user, onLogout }) {
                   <img 
                     src={selectedRowImage} 
                     alt="Page Reference"
-                    className="max-w-full h-auto"
+                    className="max-w-full h-auto rounded-lg"
                   />
                 </div>
               </div>
             )}
 
             {showImage && viewMode === 'individual' && getCurrentImageUrl() && (
-              <div className="mb-6 bg-gray-100 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Page {selectedPage} Image</h3>
+              <div className="mb-6 bg-zinc-800 border border-zinc-700 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-white mb-2">Page {selectedPage} Image</h3>
                 <div className="overflow-auto max-h-96">
                   <img 
                     src={getCurrentImageUrl()} 
                     alt={`Page ${selectedPage}`}
-                    className="max-w-full h-auto border border-gray-300 rounded"
+                    className="max-w-full h-auto border border-zinc-700 rounded"
                   />
                 </div>
               </div>
             )}
 
             {showRaw && viewMode === 'individual' && (
-              <div className="mb-6 bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto">
+              <div className="mb-6 bg-zinc-950 text-green-400 p-4 rounded-lg overflow-auto border border-zinc-800">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-semibold">Raw Gemini Output - Page {selectedPage}</h3>
                   <button
@@ -494,7 +513,7 @@ function InvoiceExtractor({ user, onLogout }) {
                       navigator.clipboard.writeText(getCurrentRawOutput());
                       alert('Copied to clipboard!');
                     }}
-                    className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1 rounded text-sm transition-colors"
                   >
                     Copy
                   </button>
@@ -503,15 +522,15 @@ function InvoiceExtractor({ user, onLogout }) {
               </div>
             )}
 
-            <div className="border-b border-gray-200 mb-6">
+            <div className="border-b border-zinc-800 mb-6">
               <nav className="flex space-x-4 overflow-x-auto">
                 {viewMode === 'collected' && (
                   <button
                     onClick={() => setActiveTab('totals')}
                     className={`py-2 px-4 font-medium text-sm transition-colors whitespace-nowrap ${
                       activeTab === 'totals'
-                        ? 'border-b-2 border-green-600 text-green-600'
-                        : 'text-gray-500 hover:text-gray-700'
+                        ? 'border-b-2 border-green-500 text-green-500'
+                        : 'text-gray-400 hover:text-white'
                     }`}
                   >
                     Totals Summary
@@ -526,8 +545,8 @@ function InvoiceExtractor({ user, onLogout }) {
                       onClick={() => setActiveTab(tab)}
                       className={`py-2 px-4 font-medium text-sm transition-colors whitespace-nowrap ${
                         activeTab === tab
-                          ? 'border-b-2 border-indigo-600 text-indigo-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                          ? 'border-b-2 border-blue-500 text-blue-500'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count})
@@ -557,7 +576,7 @@ function InvoiceExtractor({ user, onLogout }) {
                 )}
               </div>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
