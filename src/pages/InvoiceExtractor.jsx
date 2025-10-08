@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import FileUpload from '../components/FileUpload';
 import DataTable from '../components/DataTable';
 import TotalsSummary from '../components/TotalsSummary';
@@ -221,22 +221,33 @@ function InvoiceExtractor({ user, onLogout }) {
     if (!totalsWS['!merges']) totalsWS['!merges'] = [];
     totalsWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
     
-    if (!totalsWS['A1'].s) totalsWS['A1'].s = {};
-    totalsWS['A1'].s = {
-      fill: { patternType: "solid", fgColor: { rgb: "006400" }, bgColor: { rgb: "006400" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14, name: "Calibri" },
+    // Apply styles using correct structure
+    const cellStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14 },
       alignment: { horizontal: "center", vertical: "center" }
     };
     
+    const headerCellStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+    
+    // Style first row
+    if (totalsWS['A1']) totalsWS['A1'].s = cellStyle;
+    
+    // Style header row
     ['A4', 'B4', 'C4'].forEach(cell => {
-      if (totalsWS[cell]) {
-        totalsWS[cell].s = {
-          fill: { patternType: "solid", fgColor: { rgb: "006400" }, bgColor: { rgb: "006400" } },
-          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
+      if (totalsWS[cell]) totalsWS[cell].s = headerCellStyle;
     });
+
+    // Set column widths (doubled)
+    totalsWS['!cols'] = [
+      { wch: 40 },  // Column A - doubled from 20
+      { wch: 30 },  // Column B - doubled from 15
+      { wch: 40 }   // Column C - doubled from 20
+    ];
 
     XLSX.utils.book_append_sheet(wb, totalsWS, 'Totals');
 
@@ -263,29 +274,23 @@ function InvoiceExtractor({ user, onLogout }) {
         if (!ws['!merges']) ws['!merges'] = [];
         ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } });
         
-        if (!ws['A1'].s) ws['A1'].s = {};
-        ws['A1'].s = {
-          fill: { patternType: "solid", fgColor: { rgb: "006400" }, bgColor: { rgb: "006400" } },
-          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14, name: "Calibri" },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
+        // Style first row
+        if (ws['A1']) ws['A1'].s = cellStyle;
         
+        // Style header row
         headers.forEach((_, idx) => {
           const cellRef = XLSX.utils.encode_cell({ r: 3, c: idx });
-          if (ws[cellRef]) {
-            ws[cellRef].s = {
-              fill: { patternType: "solid", fgColor: { rgb: "006400" }, bgColor: { rgb: "006400" } },
-              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          }
+          if (ws[cellRef]) ws[cellRef].s = headerCellStyle;
         });
+        
+        // Set column widths (doubled)
+        ws['!cols'] = headers.map(() => ({ wch: 40 }));  // doubled from 20
         
         XLSX.utils.book_append_sheet(wb, ws, category.charAt(0).toUpperCase() + category.slice(1));
       }
     });
 
-    XLSX.writeFile(wb, 'invoice_data.xlsx', { cellStyles: true });
+    XLSX.writeFile(wb, 'invoice_data.xlsx');
   };
 
   const handleViewPageReference = (pageNumber) => {
