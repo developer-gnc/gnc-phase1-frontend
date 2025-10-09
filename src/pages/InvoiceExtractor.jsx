@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx-js-style';
 import FileUpload from '../components/FileUpload';
 import DataTable from '../components/DataTable';
@@ -8,6 +8,8 @@ import TotalsSummary from '../components/TotalsSummary';
 import { API_URL } from '../config/api';
 
 function InvoiceExtractor({ user, onLogout }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -20,8 +22,48 @@ function InvoiceExtractor({ user, onLogout }) {
   const [showRaw, setShowRaw] = useState(false);
   const [showImage, setShowImage] = useState(true);
   const [selectedRowImage, setSelectedRowImage] = useState(null);
-  const [pageErrors, setPageErrors] = useState([]);
   const [processingStatus, setProcessingStatus] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  const abortControllerRef = useRef(null);
+  const readerRef = useRef(null);
+  const isProcessingRef = useRef(false);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isProcessingRef.current) {
+        e.preventDefault();
+        e.returnValue = 'Processing is in progress. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    const handlePopState = (e) => {
+      if (isProcessingRef.current) {
+        e.preventDefault();
+        window.history.pushState(null, '', location.pathname);
+        setShowCancelConfirm(true);
+      }
+    };
+
+    window.history.pushState(null, '', location.pathname);
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+      
+      if (isProcessingRef.current && abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    isProcessingRef.current = loading;
+  }, [loading]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -31,6 +73,44 @@ function InvoiceExtractor({ user, onLogout }) {
     } else {
       setError('Please select a valid PDF file');
     }
+  };
+
+  const cancelProcessing = async () => {
+    console.log('🛑 Cancelling PDF processing...');
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    if (readerRef.current) {
+      try {
+        await readerRef.current.cancel();
+      } catch (e) {
+        console.log('Reader already closed');
+      }
+    }
+
+    setLoading(false);
+    setProcessingStatus('Processing cancelled');
+    setError(null);
+    isProcessingRef.current = false;
+
+    console.log('✅ Processing cancelled successfully');
+  };
+
+  const handleCancelClick = () => {
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancel = async () => {
+    await cancelProcessing();
+    setShowCancelConfirm(false);
+  };
+
+  const handleNavigateBack = async () => {
+    await cancelProcessing();
+    setShowCancelConfirm(false);
+    navigate('/dashboard');
   };
 
   const handleUpload = async () => {
@@ -44,8 +124,10 @@ function InvoiceExtractor({ user, onLogout }) {
     setAllPagesData([]);
     setCollectedResult(null);
     setProgress({ current: 0, total: 0 });
-    setPageErrors([]);
     setProcessingStatus('Starting...');
+    isProcessingRef.current = true;
+
+    abortControllerRef.current = new AbortController();
 
     const formData = new FormData();
     formData.append('pdf', file);
@@ -54,6 +136,7 @@ function InvoiceExtractor({ user, onLogout }) {
       const response = await fetch(`${API_URL}/api/process-pdf`, {
         method: 'POST',
         body: formData,
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
@@ -61,6 +144,7 @@ function InvoiceExtractor({ user, onLogout }) {
       }
 
       const reader = response.body.getReader();
+      readerRef.current = reader;
       const decoder = new TextDecoder();
       let buffer = '';
 
@@ -93,31 +177,26 @@ function InvoiceExtractor({ user, onLogout }) {
                     data: data.pageData,
                     rawOutput: data.rawOutput,
                     imageUrl: data.imageUrl,
-                    error: data.error
+                    error: data.error // Only real errors, not empty pages
                   }];
                   return newData;
                 });
-                
-                if (data.error) {
-                  setPageErrors(prev => [...prev, {
-                    pageNumber: data.pageNumber,
-                    error: data.error
-                  }]);
-                }
                 
                 setProcessingStatus(data.message);
               } else if (data.type === 'complete') {
                 setCollectedResult(data.collectedResult);
                 setAllPagesData(data.allPagesData);
                 setLoading(false);
+                isProcessingRef.current = false;
                 setProcessingStatus('Processing complete!');
               } else if (data.type === 'error') {
                 setError(data.error);
                 setLoading(false);
+                isProcessingRef.current = false;
                 setProcessingStatus('Error occurred');
               }
             } catch (parseError) {
-              console.error('Error parsing SSE data:', parseError, 'Raw line:', line);
+              console.error('Error parsing SSE data:', parseError);
             }
           }
         }
@@ -139,12 +218,23 @@ function InvoiceExtractor({ user, onLogout }) {
       }
       
       setLoading(false);
+      isProcessingRef.current = false;
       
     } catch (err) {
-      console.error('Upload error:', err);
-      setError(err.message || 'An error occurred while processing the PDF');
+      if (err.name === 'AbortError') {
+        console.log('Request was cancelled');
+        setError('Processing was cancelled');
+        setProcessingStatus('Cancelled');
+      } else {
+        console.error('Upload error:', err);
+        setError(err.message || 'An error occurred while processing the PDF');
+        setProcessingStatus('Error occurred');
+      }
       setLoading(false);
-      setProcessingStatus('Error occurred');
+      isProcessingRef.current = false;
+    } finally {
+      readerRef.current = null;
+      abortControllerRef.current = null;
     }
   };
 
@@ -173,8 +263,7 @@ function InvoiceExtractor({ user, onLogout }) {
     const dataToDownload = {
       collectedResult,
       allPagesData,
-      totals: calculateGrandTotals(),
-      errors: pageErrors
+      totals: calculateGrandTotals()
     };
     const dataStr = JSON.stringify(dataToDownload, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -190,7 +279,7 @@ function InvoiceExtractor({ user, onLogout }) {
     const totals = calculateGrandTotals();
 
     const totalsData = [
-      ['GNC file'],
+      ['GNC Invoice Data'],
       [],
       [],
       ['Category', 'Items', 'Total Amount'],
@@ -208,20 +297,11 @@ function InvoiceExtractor({ user, onLogout }) {
       ]
     ];
 
-    if (pageErrors.length > 0) {
-      totalsData.push(['', '', '']);
-      totalsData.push(['WARNINGS', '', '']);
-      pageErrors.forEach(err => {
-        totalsData.push([`Page ${err.pageNumber}`, err.error, '']);
-      });
-    }
-
     const totalsWS = XLSX.utils.aoa_to_sheet(totalsData);
     
     if (!totalsWS['!merges']) totalsWS['!merges'] = [];
     totalsWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
     
-    // Apply styles using correct structure
     const cellStyle = {
       fill: { patternType: "solid", fgColor: { rgb: "006666" } },
       font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14 },
@@ -234,19 +314,16 @@ function InvoiceExtractor({ user, onLogout }) {
       alignment: { horizontal: "center", vertical: "center" }
     };
     
-    // Style first row
     if (totalsWS['A1']) totalsWS['A1'].s = cellStyle;
     
-    // Style header row
     ['A4', 'B4', 'C4'].forEach(cell => {
       if (totalsWS[cell]) totalsWS[cell].s = headerCellStyle;
     });
 
-    // Set column widths (doubled)
     totalsWS['!cols'] = [
-      { wch: 40 },  // Column A - doubled from 20
-      { wch: 30 },  // Column B - doubled from 15
-      { wch: 40 }   // Column C - doubled from 20
+      { wch: 40 },
+      { wch: 30 },
+      { wch: 40 }
     ];
 
     XLSX.utils.book_append_sheet(wb, totalsWS, 'Totals');
@@ -259,7 +336,7 @@ function InvoiceExtractor({ user, onLogout }) {
         const headers = Object.keys(data[0]);
         
         const sheetData = [
-          ['GNC file'],
+          ['GNC Invoice Data'],
           [],
           [],
           headers
@@ -274,17 +351,14 @@ function InvoiceExtractor({ user, onLogout }) {
         if (!ws['!merges']) ws['!merges'] = [];
         ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } });
         
-        // Style first row
         if (ws['A1']) ws['A1'].s = cellStyle;
         
-        // Style header row
         headers.forEach((_, idx) => {
           const cellRef = XLSX.utils.encode_cell({ r: 3, c: idx });
           if (ws[cellRef]) ws[cellRef].s = headerCellStyle;
         });
         
-        // Set column widths (doubled)
-        ws['!cols'] = headers.map(() => ({ wch: 40 }));  // doubled from 20
+        ws['!cols'] = headers.map(() => ({ wch: 40 }));
         
         XLSX.utils.book_append_sheet(wb, ws, category.charAt(0).toUpperCase() + category.slice(1));
       }
@@ -327,8 +401,62 @@ function InvoiceExtractor({ user, onLogout }) {
 
   const totals = calculateGrandTotals();
 
+  // Get pages with actual errors (not empty pages)
+  const pagesWithErrors = allPagesData.filter(p => p.error);
+
   return (
     <div className="min-h-screen bg-black">
+      {/* Cancel Confirmation Modal */}
+      <AnimatePresence>
+        {showCancelConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-sm px-4"
+            onClick={() => setShowCancelConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-zinc-900 p-6 sm:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-zinc-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center mb-6">
+                <div className="bg-yellow-900 bg-opacity-30 p-3 rounded-xl mr-4 border border-yellow-800">
+                  <svg className="w-6 sm:w-7 h-6 sm:h-7 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">Cancel Processing?</h3>
+              </div>
+              <p className="text-gray-400 mb-8 leading-relaxed text-sm sm:text-base">
+                Processing is currently in progress. Are you sure you want to cancel? 
+                <span className="block mt-2 font-semibold text-white">
+                  All progress will be lost.
+                </span>
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-semibold border border-zinc-700 transition-colors"
+                >
+                  Continue Processing
+                </button>
+                <button
+                  onClick={location.state?.fromBack ? handleNavigateBack : confirmCancel}
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
+                >
+                  {location.state?.fromBack ? 'Cancel & Go Back' : 'Cancel Processing'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Navbar */}
       <nav className="bg-black border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -343,6 +471,12 @@ function InvoiceExtractor({ user, onLogout }) {
                 <Link 
                   to="/dashboard" 
                   className="text-gray-400 hover:text-white font-medium transition-colors"
+                  onClick={(e) => {
+                    if (isProcessingRef.current) {
+                      e.preventDefault();
+                      setShowCancelConfirm(true);
+                    }
+                  }}
                 >
                   Dashboard
                 </Link>
@@ -378,6 +512,7 @@ function InvoiceExtractor({ user, onLogout }) {
           processingStatus={processingStatus}
           onFileChange={handleFileChange}
           onUpload={handleUpload}
+          onCancel={handleCancelClick}
         />
 
         {collectedResult && (
@@ -442,7 +577,7 @@ function InvoiceExtractor({ user, onLogout }) {
                   >
                     {allPagesData.map(page => (
                       <option key={page.pageNumber} value={page.pageNumber}>
-                        Page {page.pageNumber} {page.error ? '⚠️' : ''}
+                        Page {page.pageNumber} {page.error ? '❌' : ''}
                       </option>
                     ))}
                   </select>
@@ -512,7 +647,7 @@ function InvoiceExtractor({ user, onLogout }) {
             {showRaw && viewMode === 'individual' && (
               <div className="mb-6 bg-zinc-950 text-green-400 p-4 rounded-lg overflow-auto border border-zinc-800">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold">Raw Gemini Output - Page {selectedPage}</h3>
+                  <h3 className="text-lg font-semibold">Raw Output - Page {selectedPage}</h3>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(getCurrentRawOutput());
@@ -565,7 +700,7 @@ function InvoiceExtractor({ user, onLogout }) {
               <TotalsSummary 
                 collectedResult={collectedResult} 
                 totals={totals}
-                pageErrors={pageErrors}
+                pagesWithErrors={pagesWithErrors}
               />
             )}
 
@@ -576,7 +711,6 @@ function InvoiceExtractor({ user, onLogout }) {
                     data={getCurrentData()[activeTab]}
                     type={activeTab}
                     onViewPageReference={handleViewPageReference}
-                    pageErrors={pageErrors}
                   />
                 )}
               </div>

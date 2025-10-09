@@ -1,6 +1,24 @@
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 
-function FileUpload({ file, loading, progress, allPagesData, error, processingStatus, onFileChange, onUpload }) {
+function FileUpload({ file, loading, progress, allPagesData, error, processingStatus, onFileChange, onUpload, onCancel }) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (loading) return;
+
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile?.type === 'application/pdf') {
+      onFileChange({ target: { files: [droppedFile] } });
+    }
+  };
+
+  // Calculate statistics - only count actual errors
+  const pagesWithData = allPagesData.filter(p => !p.error).length;
+  const pagesWithErrors = allPagesData.filter(p => p.error).length;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -10,9 +28,15 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
     >
       <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Invoice Data Extractor</h1>
       
-
       <div className="space-y-4">
-        <div className="border-2 border-dashed border-zinc-700 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-zinc-800 bg-opacity-50">
+        <div 
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors bg-zinc-800 bg-opacity-50 ${
+            isDragging ? 'border-blue-500 bg-blue-500 bg-opacity-10' : 'border-zinc-700 hover:border-blue-500'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
           <input
             type="file"
             accept=".pdf"
@@ -33,13 +57,29 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
           </label>
         </div>
 
-        <button
-          onClick={onUpload}
-          disabled={!file || loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-semibold disabled:bg-zinc-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
-        >
-          {loading ? 'Processing...' : 'Extract Data'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={onUpload}
+            disabled={!file || loading}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-semibold disabled:bg-zinc-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Processing...' : 'Extract Data'}
+          </button>
+          
+          {loading && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={onCancel}
+              className="bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </motion.button>
+          )}
+        </div>
 
         {error && (
           <motion.div
@@ -49,6 +89,17 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
           >
             <p className="font-semibold">Error</p>
             <p className="text-sm">{error}</p>
+          </motion.div>
+        )}
+
+        {!loading && !error && processingStatus === 'Processing cancelled' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-blue-900 bg-opacity-30 border border-blue-800 text-blue-400 px-4 py-3 rounded-lg"
+          >
+            <p className="font-semibold">Processing Cancelled</p>
+            <p className="text-sm">You cancelled the processing. You can upload a new file to start again.</p>
           </motion.div>
         )}
 
@@ -80,15 +131,15 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
             animate={{ opacity: 1, y: 0 }}
             className="bg-green-900 bg-opacity-30 border border-green-800 p-4 rounded-lg"
           >
-            <p className="text-green-400 font-semibold mb-2">Pages Completed:</p>
+            <p className="text-green-400 font-semibold mb-2">Processing Progress:</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
               {allPagesData.map(page => (
                 <span 
                   key={page.pageNumber} 
-                  className={`${page.error ? 'bg-yellow-600' : 'bg-green-600'} text-white px-3 py-1 rounded-full text-sm`}
+                  className={`${page.error ? 'bg-red-600' : 'bg-green-600'} text-white px-3 py-1 rounded-full text-sm`}
                   title={page.error || 'Success'}
                 >
-                  Page {page.pageNumber} {page.error ? '⚠️' : '✓'}
+                  Page {page.pageNumber} {page.error ? '❌' : '✓'}
                 </span>
               ))}
             </div>
@@ -101,11 +152,13 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
             animate={{ opacity: 1, y: 0 }}
             className="bg-blue-900 bg-opacity-30 border border-blue-800 p-4 rounded-lg"
           >
-            <p className="text-blue-400 font-semibold mb-2">Processing Summary:</p>
-            <div className="text-sm text-blue-300">
-              <p>Total Pages: {allPagesData.length}</p>
-              <p>Successful: {allPagesData.filter(p => !p.error).length}</p>
-              <p>With Warnings: {allPagesData.filter(p => p.error).length}</p>
+            <p className="text-blue-400 font-semibold mb-2">✅ Processing Complete</p>
+            <div className="text-sm text-blue-300 space-y-1">
+              <p>📄 Total Pages: {allPagesData.length}</p>
+              <p>✓ Successfully Processed: {pagesWithData}</p>
+              {pagesWithErrors > 0 && (
+                <p className="text-red-400">❌ Failed Pages: {pagesWithErrors}</p>
+              )}
             </div>
           </motion.div>
         )}
