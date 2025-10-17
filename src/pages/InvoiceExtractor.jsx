@@ -6,6 +6,7 @@ import FileUpload from '../components/FileUpload';
 import DataTable from '../components/DataTable';
 import TotalsSummary from '../components/TotalsSummary';
 import { API_URL } from '../config/api';
+import api from '../config/api';
 
 function InvoiceExtractor({ user, onLogout }) {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ function InvoiceExtractor({ user, onLogout }) {
   const [selectedRowImage, setSelectedRowImage] = useState(null);
   const [processingStatus, setProcessingStatus] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   const abortControllerRef = useRef(null);
   const readerRef = useRef(null);
@@ -70,6 +72,10 @@ function InvoiceExtractor({ user, onLogout }) {
     if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
       setError(null);
+      // Clear previous results when new file is selected
+      setAllPagesData([]);
+      setCollectedResult(null);
+      setSessionId(null);
     } else {
       setError('Please select a valid PDF file');
     }
@@ -90,10 +96,20 @@ function InvoiceExtractor({ user, onLogout }) {
       }
     }
 
+    // Send cancellation request to server if we have a sessionId
+    if (sessionId) {
+      try {
+        await api.post('/api/cancel-processing', { sessionId });
+      } catch (error) {
+        console.log('Cancel request failed:', error.message);
+      }
+    }
+
     setLoading(false);
     setProcessingStatus('Processing cancelled');
     setError(null);
     isProcessingRef.current = false;
+    setSessionId(null);
 
     console.log('✅ Processing cancelled successfully');
   };
@@ -126,17 +142,26 @@ function InvoiceExtractor({ user, onLogout }) {
     setProgress({ current: 0, total: 0 });
     setProcessingStatus('Starting...');
     isProcessingRef.current = true;
+    setSessionId(null);
 
     abortControllerRef.current = new AbortController();
 
     const formData = new FormData();
     formData.append('pdf', file);
+    // Add user identifier to ensure session isolation
+    formData.append('userId', user.id);
 
     try {
+      // Get auth token for authenticated request
+      const token = localStorage.getItem('authToken');
+      
       const response = await fetch(`${API_URL}/api/process-pdf`, {
         method: 'POST',
         body: formData,
-        signal: abortControllerRef.current.signal
+        signal: abortControllerRef.current.signal,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (!response.ok) {
@@ -163,6 +188,11 @@ function InvoiceExtractor({ user, onLogout }) {
               if (!jsonStr) continue;
               
               const data = JSON.parse(jsonStr);
+
+              // Store session ID for potential cancellation
+              if (data.sessionId && !sessionId) {
+                setSessionId(data.sessionId);
+              }
 
               if (data.type === 'status') {
                 setProgress({ current: data.currentPage, total: data.totalPages });
@@ -235,6 +265,7 @@ function InvoiceExtractor({ user, onLogout }) {
     } finally {
       readerRef.current = null;
       abortControllerRef.current = null;
+      setSessionId(null);
     }
   };
 
@@ -269,14 +300,19 @@ function InvoiceExtractor({ user, onLogout }) {
     const dataToDownload = {
       collectedResult,
       allPagesData,
-      totals: calculateGrandTotals()
+      totals: calculateGrandTotals(),
+      metadata: {
+        fileName: file?.name,
+        processedBy: user.email,
+        processedAt: new Date().toISOString()
+      }
     };
     const dataStr = JSON.stringify(dataToDownload, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'extracted_data.json';
+    link.download = `extracted_data_${Date.now()}.json`;
     link.click();
   };
 
@@ -286,7 +322,9 @@ function InvoiceExtractor({ user, onLogout }) {
 
     const totalsData = [
       ['GNC Invoice Data'],
-      [],
+      [`Processed by: ${user.email}`],
+      [`File: ${file?.name || 'Unknown'}`],
+      [`Date: ${new Date().toLocaleDateString()}`],
       [],
       ['Category', 'Items', 'Total Amount'],
       ['Labour', collectedResult.labour.length, `${totals.labour.toFixed(2)}`],
@@ -325,7 +363,7 @@ function InvoiceExtractor({ user, onLogout }) {
     
     if (totalsWS['A1']) totalsWS['A1'].s = cellStyle;
     
-    ['A4', 'B4', 'C4'].forEach(cell => {
+    ['A6', 'B6', 'C6'].forEach(cell => {
       if (totalsWS[cell]) totalsWS[cell].s = headerCellStyle;
     });
 
@@ -347,7 +385,8 @@ function InvoiceExtractor({ user, onLogout }) {
         
         const sheetData = [
           ['GNC Invoice Data'],
-          [],
+          [`Processed by: ${user.email}`],
+          [`Category: ${category}`],
           [],
           allKeys  // Use dynamic headers
         ];
@@ -364,7 +403,7 @@ function InvoiceExtractor({ user, onLogout }) {
         if (ws['A1']) ws['A1'].s = cellStyle;
         
         allKeys.forEach((_, idx) => {
-          const cellRef = XLSX.utils.encode_cell({ r: 3, c: idx });
+          const cellRef = XLSX.utils.encode_cell({ r: 4, c: idx });
           if (ws[cellRef]) ws[cellRef].s = headerCellStyle;
         });
         
@@ -379,7 +418,8 @@ function InvoiceExtractor({ user, onLogout }) {
       }
     });
 
-    XLSX.writeFile(wb, 'invoice_data.xlsx');
+    const fileName = `invoice_data_${user.email.split('@')[0]}_${Date.now()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
   const handleViewPageReference = (pageNumber) => {
@@ -538,7 +578,10 @@ function InvoiceExtractor({ user, onLogout }) {
             className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-xl mt-6"
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <h2 className="text-2xl font-bold text-white">Extracted Data</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-white">Extracted Data</h2>
+                <p className="text-sm text-gray-400 mt-1">Processed by {user.email}</p>
+              </div>
               <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={downloadJSON}

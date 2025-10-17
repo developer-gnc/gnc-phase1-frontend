@@ -53,6 +53,9 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
               <p className="mt-2 text-sm text-gray-300">
                 {file ? file.name : 'Click to upload PDF or drag and drop'}
               </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Only PDF files are supported (Max 50MB)
+              </p>
             </div>
           </label>
         </div>
@@ -139,7 +142,7 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
                   className={`${page.error ? 'bg-red-600' : 'bg-green-600'} text-white px-3 py-1 rounded-full text-sm`}
                   title={page.error || 'Success'}
                 >
-                  Page {page.pageNumber} {page.error ? '❌' : '✓'}
+                  Page {page.pageNumber} {page.error ? '❌' : '✅'}
                 </span>
               ))}
             </div>
