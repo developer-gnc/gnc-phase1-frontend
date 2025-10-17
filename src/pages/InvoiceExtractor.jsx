@@ -30,6 +30,33 @@ function InvoiceExtractor({ user, onLogout }) {
   const abortControllerRef = useRef(null);
   const readerRef = useRef(null);
   const isProcessingRef = useRef(false);
+  const currentSessionIdRef = useRef(null);
+
+  // Function to add authentication token to image URLs
+  const getAuthenticatedImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    const token = localStorage.getItem('authToken');
+    if (!token) return imageUrl;
+    
+    // Add token as query parameter for image authentication
+    const separator = imageUrl.includes('?') ? '&' : '?';
+    return `${imageUrl}${separator}token=${token}`;
+  };
+
+  // Cleanup session images when component unmounts or session changes
+  const cleanupCurrentSession = async () => {
+    if (currentSessionIdRef.current) {
+      try {
+        await api.post('/api/cleanup-session-images', { 
+          sessionId: currentSessionIdRef.current 
+        });
+        console.log(`✅ Cleaned up images for session: ${currentSessionIdRef.current}`);
+      } catch (error) {
+        console.log(`⚠️ Could not cleanup session images: ${error.message}`);
+      }
+      currentSessionIdRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -37,6 +64,9 @@ function InvoiceExtractor({ user, onLogout }) {
         e.preventDefault();
         e.returnValue = 'Processing is in progress. Are you sure you want to leave?';
         return e.returnValue;
+      } else if (currentSessionIdRef.current) {
+        // Cleanup images when user is leaving
+        cleanupCurrentSession();
       }
     };
 
@@ -45,6 +75,9 @@ function InvoiceExtractor({ user, onLogout }) {
         e.preventDefault();
         window.history.pushState(null, '', location.pathname);
         setShowCancelConfirm(true);
+      } else if (currentSessionIdRef.current) {
+        // Cleanup images when navigating away
+        cleanupCurrentSession();
       }
     };
 
@@ -53,6 +86,7 @@ function InvoiceExtractor({ user, onLogout }) {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('popstate', handlePopState);
 
+    // Cleanup on component unmount
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
@@ -60,12 +94,26 @@ function InvoiceExtractor({ user, onLogout }) {
       if (isProcessingRef.current && abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      
+      // Cleanup session images when component unmounts
+      cleanupCurrentSession();
     };
   }, [location.pathname]);
 
   useEffect(() => {
     isProcessingRef.current = loading;
   }, [loading]);
+
+  // Update current session ID ref when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      // Cleanup previous session if exists
+      if (currentSessionIdRef.current && currentSessionIdRef.current !== sessionId) {
+        cleanupCurrentSession();
+      }
+      currentSessionIdRef.current = sessionId;
+    }
+  }, [sessionId]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -75,6 +123,10 @@ function InvoiceExtractor({ user, onLogout }) {
       // Clear previous results when new file is selected
       setAllPagesData([]);
       setCollectedResult(null);
+      // Cleanup previous session images
+      if (currentSessionIdRef.current) {
+        cleanupCurrentSession();
+      }
       setSessionId(null);
     } else {
       setError('Please select a valid PDF file');
@@ -125,6 +177,8 @@ function InvoiceExtractor({ user, onLogout }) {
 
   const handleNavigateBack = async () => {
     await cancelProcessing();
+    // Cleanup images before navigating
+    await cleanupCurrentSession();
     setShowCancelConfirm(false);
     navigate('/dashboard');
   };
@@ -530,6 +584,9 @@ function InvoiceExtractor({ user, onLogout }) {
                     if (isProcessingRef.current) {
                       e.preventDefault();
                       setShowCancelConfirm(true);
+                    } else if (currentSessionIdRef.current) {
+                      // Cleanup images before navigating
+                      cleanupCurrentSession();
                     }
                   }}
                 >
@@ -681,7 +738,7 @@ function InvoiceExtractor({ user, onLogout }) {
                     </button>
                   </div>
                   <img 
-                    src={selectedRowImage} 
+                    src={getAuthenticatedImageUrl(selectedRowImage)} 
                     alt="Page Reference"
                     className="max-w-full h-auto rounded-lg"
                   />
@@ -694,7 +751,7 @@ function InvoiceExtractor({ user, onLogout }) {
                 <h3 className="text-lg font-semibold text-white mb-2">Page {selectedPage} Image</h3>
                 <div className="overflow-auto max-h-96">
                   <img 
-                    src={getCurrentImageUrl()} 
+                    src={getAuthenticatedImageUrl(getCurrentImageUrl())} 
                     alt={`Page ${selectedPage}`}
                     className="max-w-full h-auto border border-zinc-700 rounded"
                   />
