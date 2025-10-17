@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx-js-style';
 import FileUpload from '../components/FileUpload';
+import ImageSelection from '../components/ImageSelection';
 import DataTable from '../components/DataTable';
 import TotalsSummary from '../components/TotalsSummary';
 import { API_URL } from '../config/api';
@@ -26,6 +27,11 @@ function InvoiceExtractor({ user, onLogout }) {
   const [processingStatus, setProcessingStatus] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  
+  // NEW: Image selection state
+  const [showImageSelection, setShowImageSelection] = useState(false);
+  const [availableImages, setAvailableImages] = useState([]);
+  const [processingPhase, setProcessingPhase] = useState('upload'); // 'upload', 'selection', 'processing', 'complete'
 
   const abortControllerRef = useRef(null);
   const readerRef = useRef(null);
@@ -38,7 +44,6 @@ function InvoiceExtractor({ user, onLogout }) {
     const token = localStorage.getItem('authToken');
     if (!token) return imageUrl;
     
-    // Add token as query parameter for image authentication
     const separator = imageUrl.includes('?') ? '&' : '?';
     return `${imageUrl}${separator}token=${token}`;
   };
@@ -65,7 +70,6 @@ function InvoiceExtractor({ user, onLogout }) {
         e.returnValue = 'Processing is in progress. Are you sure you want to leave?';
         return e.returnValue;
       } else if (currentSessionIdRef.current) {
-        // Cleanup images when user is leaving
         cleanupCurrentSession();
       }
     };
@@ -76,7 +80,6 @@ function InvoiceExtractor({ user, onLogout }) {
         window.history.pushState(null, '', location.pathname);
         setShowCancelConfirm(true);
       } else if (currentSessionIdRef.current) {
-        // Cleanup images when navigating away
         cleanupCurrentSession();
       }
     };
@@ -86,7 +89,6 @@ function InvoiceExtractor({ user, onLogout }) {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('popstate', handlePopState);
 
-    // Cleanup on component unmount
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
@@ -95,7 +97,6 @@ function InvoiceExtractor({ user, onLogout }) {
         abortControllerRef.current.abort();
       }
       
-      // Cleanup session images when component unmounts
       cleanupCurrentSession();
     };
   }, [location.pathname]);
@@ -104,10 +105,8 @@ function InvoiceExtractor({ user, onLogout }) {
     isProcessingRef.current = loading;
   }, [loading]);
 
-  // Update current session ID ref when sessionId changes
   useEffect(() => {
     if (sessionId) {
-      // Cleanup previous session if exists
       if (currentSessionIdRef.current && currentSessionIdRef.current !== sessionId) {
         cleanupCurrentSession();
       }
@@ -120,10 +119,12 @@ function InvoiceExtractor({ user, onLogout }) {
     if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
       setError(null);
-      // Clear previous results when new file is selected
+      // Reset all states when new file is selected
       setAllPagesData([]);
       setCollectedResult(null);
-      // Cleanup previous session images
+      setShowImageSelection(false);
+      setAvailableImages([]);
+      setProcessingPhase('upload');
       if (currentSessionIdRef.current) {
         cleanupCurrentSession();
       }
@@ -148,7 +149,6 @@ function InvoiceExtractor({ user, onLogout }) {
       }
     }
 
-    // Send cancellation request to server if we have a sessionId
     if (sessionId) {
       try {
         await api.post('/api/cancel-processing', { sessionId });
@@ -162,6 +162,8 @@ function InvoiceExtractor({ user, onLogout }) {
     setError(null);
     isProcessingRef.current = false;
     setSessionId(null);
+    setShowImageSelection(false);
+    setProcessingPhase('upload');
 
     console.log('✅ Processing cancelled successfully');
   };
@@ -177,7 +179,6 @@ function InvoiceExtractor({ user, onLogout }) {
 
   const handleNavigateBack = async () => {
     await cancelProcessing();
-    // Cleanup images before navigating
     await cleanupCurrentSession();
     setShowCancelConfirm(false);
     navigate('/dashboard');
@@ -197,16 +198,15 @@ function InvoiceExtractor({ user, onLogout }) {
     setProcessingStatus('Starting...');
     isProcessingRef.current = true;
     setSessionId(null);
+    setProcessingPhase('processing');
 
     abortControllerRef.current = new AbortController();
 
     const formData = new FormData();
     formData.append('pdf', file);
-    // Add user identifier to ensure session isolation
     formData.append('userId', user.id);
 
     try {
-      // Get auth token for authenticated request
       const token = localStorage.getItem('authToken');
       
       const response = await fetch(`${API_URL}/api/process-pdf`, {
@@ -243,10 +243,154 @@ function InvoiceExtractor({ user, onLogout }) {
               
               const data = JSON.parse(jsonStr);
 
-              // Store session ID for potential cancellation
               if (data.sessionId && !sessionId) {
                 setSessionId(data.sessionId);
               }
+
+              if (data.type === 'status') {
+                setProgress({ current: data.currentPage, total: data.totalPages });
+                setProcessingStatus(data.message);
+              } else if (data.type === 'progress') {
+                setProgress({ current: data.currentPage, total: data.totalPages });
+                setProcessingStatus(data.message);
+              } else if (data.type === 'images_ready') {
+                // NEW: Images are ready for selection
+                setAvailableImages(data.allImages);
+                setShowImageSelection(true);
+                setProcessingPhase('selection');
+                setLoading(false);
+                isProcessingRef.current = false;
+                setProcessingStatus('Images ready for selection');
+              } else if (data.type === 'page_complete') {
+                setAllPagesData(prev => {
+                  const newData = [...prev, {
+                    pageNumber: data.pageNumber,
+                    data: data.pageData,
+                    rawOutput: data.rawOutput,
+                    imageUrl: data.imageUrl,
+                    error: data.error
+                  }];
+                  return newData;
+                });
+                
+                setProcessingStatus(data.message);
+              } else if (data.type === 'complete') {
+                setCollectedResult(data.collectedResult);
+                setAllPagesData(data.allPagesData);
+                setLoading(false);
+                isProcessingRef.current = false;
+                setProcessingStatus('Processing complete!');
+                setProcessingPhase('complete');
+              } else if (data.type === 'error') {
+                setError(data.error);
+                setLoading(false);
+                isProcessingRef.current = false;
+                setProcessingStatus('Error occurred');
+                setProcessingPhase('upload');
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError);
+            }
+          }
+        }
+      }
+      
+      if (buffer.trim().startsWith('data: ')) {
+        try {
+          const jsonStr = buffer.slice(6).trim();
+          if (jsonStr) {
+            const data = JSON.parse(jsonStr);
+            if (data.type === 'complete') {
+              setCollectedResult(data.collectedResult);
+              setAllPagesData(data.allPagesData);
+              setProcessingPhase('complete');
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing final buffer:', e);
+        }
+      }
+      
+      setLoading(false);
+      isProcessingRef.current = false;
+      
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('Request was cancelled');
+        setError('Processing was cancelled');
+        setProcessingStatus('Cancelled');
+      } else {
+        console.error('Upload error:', err);
+        setError(err.message || 'An error occurred while processing the PDF');
+        setProcessingStatus('Error occurred');
+      }
+      setLoading(false);
+      isProcessingRef.current = false;
+      setProcessingPhase('upload');
+    } finally {
+      readerRef.current = null;
+      abortControllerRef.current = null;
+    }
+  };
+
+  // NEW: Handle selected images processing
+  // NEW: Handle selected images processing - FIXED to send only page numbers
+  const handleProcessSelected = async (selectedImages) => {
+    if (!selectedImages || selectedImages.length === 0) {
+      setError('No images selected for processing');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setProgress({ current: 0, total: selectedImages.length });
+    setProcessingStatus('Processing selected images...');
+    isProcessingRef.current = true;
+    setShowImageSelection(false);
+    setProcessingPhase('processing');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      
+      // FIXED: Only send page numbers, not the full image data
+      const selectedPageNumbers = selectedImages.map(img => img.pageNumber);
+      
+      const response = await fetch(`${API_URL}/api/process-selected-images`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          selectedPageNumbers: selectedPageNumbers // Only send page numbers
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      readerRef.current = reader;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr) continue;
+              
+              const data = JSON.parse(jsonStr);
 
               if (data.type === 'status') {
                 setProgress({ current: data.currentPage, total: data.totalPages });
@@ -273,11 +417,14 @@ function InvoiceExtractor({ user, onLogout }) {
                 setLoading(false);
                 isProcessingRef.current = false;
                 setProcessingStatus('Processing complete!');
+                setProcessingPhase('complete');
               } else if (data.type === 'error') {
                 setError(data.error);
                 setLoading(false);
                 isProcessingRef.current = false;
                 setProcessingStatus('Error occurred');
+                setProcessingPhase('selection');
+                setShowImageSelection(true);
               }
             } catch (parseError) {
               console.error('Error parsing SSE data:', parseError);
@@ -286,44 +433,29 @@ function InvoiceExtractor({ user, onLogout }) {
         }
       }
       
-      if (buffer.trim().startsWith('data: ')) {
-        try {
-          const jsonStr = buffer.slice(6).trim();
-          if (jsonStr) {
-            const data = JSON.parse(jsonStr);
-            if (data.type === 'complete') {
-              setCollectedResult(data.collectedResult);
-              setAllPagesData(data.allPagesData);
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing final buffer:', e);
-        }
-      }
-      
-      setLoading(false);
-      isProcessingRef.current = false;
-      
     } catch (err) {
-      if (err.name === 'AbortError') {
-        console.log('Request was cancelled');
-        setError('Processing was cancelled');
-        setProcessingStatus('Cancelled');
-      } else {
-        console.error('Upload error:', err);
-        setError(err.message || 'An error occurred while processing the PDF');
-        setProcessingStatus('Error occurred');
-      }
+      console.error('Selected processing error:', err);
+      setError(err.message || 'An error occurred while processing selected images');
       setLoading(false);
       isProcessingRef.current = false;
+      setProcessingPhase('selection');
+      setShowImageSelection(true);
     } finally {
       readerRef.current = null;
-      abortControllerRef.current = null;
-      setSessionId(null);
     }
   };
 
-  // Simplified total calculation - only sum up totalAmount
+  // NEW: Handle extract all - FIXED to send only page numbers
+  const handleExtractAll = async (allImages) => {
+    const selectedPageNumbers = allImages.map(img => img.pageNumber);
+    const pageNumberObjects = selectedPageNumbers.map(pageNum => ({ pageNumber: pageNum }));
+    await handleProcessSelected(pageNumberObjects);
+  };
+
+  // NEW: Handle extract all (same as before but with new endpoint)
+ 
+
+  // All other functions remain the same...
   const calculateGrandTotals = () => {
     if (!collectedResult) return null;
 
@@ -434,7 +566,6 @@ function InvoiceExtractor({ user, onLogout }) {
     categories.forEach(category => {
       const data = collectedResult[category];
       if (data && data.length > 0) {
-        // Get all unique keys from all rows to handle dynamic columns
         const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))];
         
         const sheetData = [
@@ -442,7 +573,7 @@ function InvoiceExtractor({ user, onLogout }) {
           [`Processed by: ${user.email}`],
           [`Category: ${category}`],
           [],
-          allKeys  // Use dynamic headers
+          allKeys
         ];
         
         data.forEach(row => {
@@ -463,7 +594,6 @@ function InvoiceExtractor({ user, onLogout }) {
         
         ws['!cols'] = allKeys.map(() => ({ wch: 20 }));
         
-        // Create proper sheet names
         const sheetName = category === 'labourTimesheet' ? 'LabourTimesheet' :
                          category === 'equipmentLog' ? 'EquipmentLog' :
                          category.charAt(0).toUpperCase() + category.slice(1);
@@ -509,8 +639,6 @@ function InvoiceExtractor({ user, onLogout }) {
   };
 
   const totals = calculateGrandTotals();
-
-  // Get pages with actual errors (not empty pages)
   const pagesWithErrors = allPagesData.filter(p => p.error);
 
   return (
@@ -585,7 +713,6 @@ function InvoiceExtractor({ user, onLogout }) {
                       e.preventDefault();
                       setShowCancelConfirm(true);
                     } else if (currentSessionIdRef.current) {
-                      // Cleanup images before navigating
                       cleanupCurrentSession();
                     }
                   }}
@@ -615,19 +742,70 @@ function InvoiceExtractor({ user, onLogout }) {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <FileUpload
-          file={file}
-          loading={loading}
-          progress={progress}
-          allPagesData={allPagesData}
-          error={error}
-          processingStatus={processingStatus}
-          onFileChange={handleFileChange}
-          onUpload={handleUpload}
-          onCancel={handleCancelClick}
-        />
+        {/* File Upload - Show when in upload phase */}
+        {processingPhase === 'upload' && (
+          <FileUpload
+            file={file}
+            loading={loading}
+            progress={progress}
+            allPagesData={allPagesData}
+            error={error}
+            processingStatus={processingStatus}
+            onFileChange={handleFileChange}
+            onUpload={handleUpload}
+            onCancel={handleCancelClick}
+          />
+        )}
 
-        {collectedResult && (
+        {/* NEW: Image Selection - Show when images are ready for selection */}
+        {showImageSelection && processingPhase === 'selection' && (
+          <ImageSelection
+            images={availableImages}
+            onProcessSelected={handleProcessSelected}
+            onSelectAll={handleExtractAll}
+            loading={loading}
+          />
+        )}
+
+        {/* Processing Status - Show during processing phase */}
+        {processingPhase === 'processing' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 shadow-xl"
+          >
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+              <p className="mt-4 text-gray-300 font-semibold">
+                {processingStatus || `Processing page ${progress.current} of ${progress.total}...`}
+              </p>
+              {progress.total > 0 && (
+                <>
+                  <div className="w-full bg-zinc-800 rounded-full h-3 mt-4 max-w-md mx-auto">
+                    <div
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    {Math.round((progress.current / progress.total) * 100)}% Complete
+                  </p>
+                </>
+              )}
+              
+              <button
+                onClick={handleCancelClick}
+                className="mt-6 bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg font-semibold transition-colors"
+              >
+                Cancel Processing
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Results - Show when processing is complete */}
+        {collectedResult && processingPhase === 'complete' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
