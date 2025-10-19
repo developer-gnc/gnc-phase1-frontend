@@ -28,7 +28,7 @@ function InvoiceExtractor({ user, onLogout }) {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   
-  // NEW: Image selection state
+  // Image selection state
   const [showImageSelection, setShowImageSelection] = useState(false);
   const [availableImages, setAvailableImages] = useState([]);
   const [processingPhase, setProcessingPhase] = useState('upload'); // 'upload', 'selection', 'processing', 'complete'
@@ -46,6 +46,30 @@ function InvoiceExtractor({ user, onLogout }) {
     
     const separator = imageUrl.includes('?') ? '&' : '?';
     return `${imageUrl}${separator}token=${token}`;
+  };
+
+  // Reset to upload state
+  const resetToUpload = () => {
+    setFile(null);
+    setLoading(false);
+    setProgress({ current: 0, total: 0 });
+    setAllPagesData([]);
+    setCollectedResult(null);
+    setError(null);
+    setActiveTab('labour');
+    setViewMode('collected');
+    setSelectedPage(1);
+    setShowRaw(false);
+    setShowImage(true);
+    setSelectedRowImage(null);
+    setProcessingStatus('');
+    setSessionId(null);
+    setShowImageSelection(false);
+    setAvailableImages([]);
+    setProcessingPhase('upload');
+    if (currentSessionIdRef.current) {
+      cleanupCurrentSession();
+    }
   };
 
   // Cleanup session images when component unmounts or session changes
@@ -113,6 +137,17 @@ function InvoiceExtractor({ user, onLogout }) {
       currentSessionIdRef.current = sessionId;
     }
   }, [sessionId]);
+
+  // Fix: Update selectedPage when switching to individual view or when allPagesData changes
+  useEffect(() => {
+    if (viewMode === 'individual' && allPagesData.length > 0) {
+      // Find the first available page or keep current if valid
+      const availablePageNumbers = allPagesData.map(p => p.pageNumber).sort((a, b) => a - b);
+      if (!availablePageNumbers.includes(selectedPage)) {
+        setSelectedPage(availablePageNumbers[0]);
+      }
+    }
+  }, [viewMode, allPagesData, selectedPage]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -254,7 +289,7 @@ function InvoiceExtractor({ user, onLogout }) {
                 setProgress({ current: data.currentPage, total: data.totalPages });
                 setProcessingStatus(data.message);
               } else if (data.type === 'images_ready') {
-                // NEW: Images are ready for selection
+                // Images are ready for selection
                 setAvailableImages(data.allImages);
                 setShowImageSelection(true);
                 setProcessingPhase('selection');
@@ -333,8 +368,7 @@ function InvoiceExtractor({ user, onLogout }) {
     }
   };
 
-  // NEW: Handle selected images processing
-  // NEW: Handle selected images processing - FIXED to send only page numbers
+  // Handle selected images processing
   const handleProcessSelected = async (selectedImages) => {
     if (!selectedImages || selectedImages.length === 0) {
       setError('No images selected for processing');
@@ -352,7 +386,6 @@ function InvoiceExtractor({ user, onLogout }) {
     try {
       const token = localStorage.getItem('authToken');
       
-      // FIXED: Only send page numbers, not the full image data
       const selectedPageNumbers = selectedImages.map(img => img.pageNumber);
       
       const response = await fetch(`${API_URL}/api/process-selected-images`, {
@@ -363,7 +396,7 @@ function InvoiceExtractor({ user, onLogout }) {
         },
         body: JSON.stringify({
           sessionId: sessionId,
-          selectedPageNumbers: selectedPageNumbers // Only send page numbers
+          selectedPageNumbers: selectedPageNumbers
         })
       });
 
@@ -445,17 +478,13 @@ function InvoiceExtractor({ user, onLogout }) {
     }
   };
 
-  // NEW: Handle extract all - FIXED to send only page numbers
+  // Handle extract all
   const handleExtractAll = async (allImages) => {
     const selectedPageNumbers = allImages.map(img => img.pageNumber);
     const pageNumberObjects = selectedPageNumbers.map(pageNum => ({ pageNumber: pageNum }));
     await handleProcessSelected(pageNumberObjects);
   };
 
-  // NEW: Handle extract all (same as before but with new endpoint)
- 
-
-  // All other functions remain the same...
   const calculateGrandTotals = () => {
     if (!collectedResult) return null;
 
@@ -757,7 +786,7 @@ function InvoiceExtractor({ user, onLogout }) {
           />
         )}
 
-        {/* NEW: Image Selection - Show when images are ready for selection */}
+        {/* Image Selection - Show when images are ready for selection */}
         {showImageSelection && processingPhase === 'selection' && (
           <ImageSelection
             images={availableImages}
@@ -818,6 +847,16 @@ function InvoiceExtractor({ user, onLogout }) {
                 <p className="text-sm text-gray-400 mt-1">Processed by {user.email}</p>
               </div>
               <div className="flex gap-3 flex-wrap">
+                {/* Upload New File Button */}
+                <button
+                  onClick={resetToUpload}
+                  className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Upload New File
+                </button>
                 <button
                   onClick={downloadJSON}
                   className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
@@ -924,6 +963,7 @@ function InvoiceExtractor({ user, onLogout }) {
               </div>
             )}
 
+            {/* Show image in individual view - ensure it works for single pages */}
             {showImage && viewMode === 'individual' && getCurrentImageUrl() && (
               <div className="mb-6 bg-zinc-800 border border-zinc-700 p-4 rounded-lg">
                 <h3 className="text-lg font-semibold text-white mb-2">Page {selectedPage} Image</h3>
