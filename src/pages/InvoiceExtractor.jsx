@@ -28,10 +28,12 @@ function InvoiceExtractor({ user, onLogout }) {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   
-  // Image selection state
+  // OPTIMIZED: Image selection state with real-time streaming
   const [showImageSelection, setShowImageSelection] = useState(false);
   const [availableImages, setAvailableImages] = useState([]);
-  const [processingPhase, setProcessingPhase] = useState('upload'); // 'upload', 'selection', 'processing', 'complete'
+  const [processingPhase, setProcessingPhase] = useState('upload'); // 'upload', 'converting', 'selection', 'processing', 'complete'
+  const [conversionProgress, setConversionProgress] = useState({ converted: 0, total: 0 });
+  const [conversionStatus, setConversionStatus] = useState({ conversionComplete: false, allConverted: false });
 
   const abortControllerRef = useRef(null);
   const readerRef = useRef(null);
@@ -67,6 +69,8 @@ function InvoiceExtractor({ user, onLogout }) {
     setShowImageSelection(false);
     setAvailableImages([]);
     setProcessingPhase('upload');
+    setConversionProgress({ converted: 0, total: 0 });
+    setConversionStatus({ conversionComplete: false, allConverted: false });
     if (currentSessionIdRef.current) {
       cleanupCurrentSession();
     }
@@ -79,9 +83,9 @@ function InvoiceExtractor({ user, onLogout }) {
         await api.post('/api/cleanup-session-images', { 
           sessionId: currentSessionIdRef.current 
         });
-        console.log(`✅ Cleaned up images for session: ${currentSessionIdRef.current}`);
+        console.log(`Cleaned up images for session: ${currentSessionIdRef.current}`);
       } catch (error) {
-        console.log(`⚠️ Could not cleanup session images: ${error.message}`);
+        console.log(`Could not cleanup session images: ${error.message}`);
       }
       currentSessionIdRef.current = null;
     }
@@ -141,7 +145,6 @@ function InvoiceExtractor({ user, onLogout }) {
   // Fix: Update selectedPage when switching to individual view or when allPagesData changes
   useEffect(() => {
     if (viewMode === 'individual' && allPagesData.length > 0) {
-      // Find the first available page or keep current if valid
       const availablePageNumbers = allPagesData.map(p => p.pageNumber).sort((a, b) => a - b);
       if (!availablePageNumbers.includes(selectedPage)) {
         setSelectedPage(availablePageNumbers[0]);
@@ -160,6 +163,8 @@ function InvoiceExtractor({ user, onLogout }) {
       setShowImageSelection(false);
       setAvailableImages([]);
       setProcessingPhase('upload');
+      setConversionProgress({ converted: 0, total: 0 });
+      setConversionStatus({ conversionComplete: false, allConverted: false });
       if (currentSessionIdRef.current) {
         cleanupCurrentSession();
       }
@@ -170,7 +175,7 @@ function InvoiceExtractor({ user, onLogout }) {
   };
 
   const cancelProcessing = async () => {
-    console.log('🛑 Cancelling PDF processing...');
+    console.log('Cancelling PDF processing...');
     
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -199,8 +204,9 @@ function InvoiceExtractor({ user, onLogout }) {
     setSessionId(null);
     setShowImageSelection(false);
     setProcessingPhase('upload');
+    setConversionProgress({ converted: 0, total: 0 });
 
-    console.log('✅ Processing cancelled successfully');
+    console.log('Processing cancelled successfully');
   };
 
   const handleCancelClick = () => {
@@ -219,6 +225,24 @@ function InvoiceExtractor({ user, onLogout }) {
     navigate('/dashboard');
   };
 
+  // NEW: Handle upload new file - cancel current process and reset
+  const handleUploadNew = async () => {
+    console.log('Upload new file requested - canceling current process...');
+    
+    // Cancel any ongoing processing
+    if (loading || isProcessingRef.current) {
+      await cancelProcessing();
+    }
+    
+    // Cleanup current session
+    await cleanupCurrentSession();
+    
+    // Reset to upload state
+    resetToUpload();
+    
+    console.log('Reset to upload state complete');
+  };
+
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a PDF file first');
@@ -229,11 +253,13 @@ function InvoiceExtractor({ user, onLogout }) {
     setError(null);
     setAllPagesData([]);
     setCollectedResult(null);
+    setAvailableImages([]);
     setProgress({ current: 0, total: 0 });
-    setProcessingStatus('Starting...');
+    setConversionProgress({ converted: 0, total: 0 });
+    setProcessingStatus('Starting optimized processing...');
     isProcessingRef.current = true;
     setSessionId(null);
-    setProcessingPhase('processing');
+    setProcessingPhase('converting');
 
     abortControllerRef.current = new AbortController();
 
@@ -288,14 +314,39 @@ function InvoiceExtractor({ user, onLogout }) {
               } else if (data.type === 'progress') {
                 setProgress({ current: data.currentPage, total: data.totalPages });
                 setProcessingStatus(data.message);
+              } else if (data.type === 'images_batch_ready') {
+                // OPTIMIZED: Real-time streaming of converted images
+                const newImages = data.batchImages;
+                setAvailableImages(prev => {
+                  const combined = [...prev, ...newImages];
+                  return combined.sort((a, b) => a.pageNumber - b.pageNumber);
+                });
+                setConversionProgress({ 
+                  converted: data.totalConverted, 
+                  total: data.totalPages 
+                });
+                setProcessingStatus(data.message);
+                
+                // Show image selection as soon as first batch is ready
+                if (!showImageSelection) {
+                  setShowImageSelection(true);
+                  setProcessingPhase('selection');
+                  setLoading(false);
+                  isProcessingRef.current = false;
+                }
               } else if (data.type === 'images_ready') {
-                // Images are ready for selection
+                // Final images ready for selection - mark conversion as complete
                 setAvailableImages(data.allImages);
                 setShowImageSelection(true);
                 setProcessingPhase('selection');
                 setLoading(false);
                 isProcessingRef.current = false;
-                setProcessingStatus('Images ready for selection');
+                setProcessingStatus('All images ready for selection');
+                // Mark conversion as complete to enable extract buttons
+                setConversionStatus({ 
+                  conversionComplete: data.conversionComplete || true, 
+                  allConverted: true 
+                });
               } else if (data.type === 'page_complete') {
                 setAllPagesData(prev => {
                   const newData = [...prev, {
@@ -368,8 +419,8 @@ function InvoiceExtractor({ user, onLogout }) {
     }
   };
 
-  // Handle selected images processing
-  const handleProcessSelected = async (selectedImages) => {
+  // OPTIMIZED: Handle selected images processing with model selection
+  const handleProcessSelected = async (selectedImages, selectedModel = 'gemini-2.0-flash') => {
     if (!selectedImages || selectedImages.length === 0) {
       setError('No images selected for processing');
       return;
@@ -377,17 +428,18 @@ function InvoiceExtractor({ user, onLogout }) {
 
     setLoading(true);
     setError(null);
-    setProgress({ current: 0, total: selectedImages.length });
-    setProcessingStatus('Processing selected images...');
-    isProcessingRef.current = true;
-    setShowImageSelection(false);
+    setAllPagesData([]);
+    setCollectedResult(null);
+    setProcessingStatus(`Starting AI analysis with ${selectedModel}...`);
     setProcessingPhase('processing');
+    isProcessingRef.current = true;
+
+    abortControllerRef.current = new AbortController();
 
     try {
       const token = localStorage.getItem('authToken');
-      
       const selectedPageNumbers = selectedImages.map(img => img.pageNumber);
-      
+
       const response = await fetch(`${API_URL}/api/process-selected-images`, {
         method: 'POST',
         headers: {
@@ -395,9 +447,11 @@ function InvoiceExtractor({ user, onLogout }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
+          selectedPageNumbers: selectedPageNumbers,
           sessionId: sessionId,
-          selectedPageNumbers: selectedPageNumbers
-        })
+          model: selectedModel  // Add model parameter
+        }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
@@ -426,7 +480,6 @@ function InvoiceExtractor({ user, onLogout }) {
               const data = JSON.parse(jsonStr);
 
               if (data.type === 'status') {
-                setProgress({ current: data.currentPage, total: data.totalPages });
                 setProcessingStatus(data.message);
               } else if (data.type === 'progress') {
                 setProgress({ current: data.currentPage, total: data.totalPages });
@@ -440,16 +493,15 @@ function InvoiceExtractor({ user, onLogout }) {
                     imageUrl: data.imageUrl,
                     error: data.error
                   }];
-                  return newData;
+                  return newData.sort((a, b) => a.pageNumber - b.pageNumber);
                 });
-                
                 setProcessingStatus(data.message);
               } else if (data.type === 'complete') {
                 setCollectedResult(data.collectedResult);
                 setAllPagesData(data.allPagesData);
                 setLoading(false);
                 isProcessingRef.current = false;
-                setProcessingStatus('Processing complete!');
+                setProcessingStatus('AI analysis complete!');
                 setProcessingPhase('complete');
               } else if (data.type === 'error') {
                 setError(data.error);
@@ -457,7 +509,6 @@ function InvoiceExtractor({ user, onLogout }) {
                 isProcessingRef.current = false;
                 setProcessingStatus('Error occurred');
                 setProcessingPhase('selection');
-                setShowImageSelection(true);
               }
             } catch (parseError) {
               console.error('Error parsing SSE data:', parseError);
@@ -465,30 +516,60 @@ function InvoiceExtractor({ user, onLogout }) {
           }
         }
       }
+
+      if (buffer.trim().startsWith('data: ')) {
+        try {
+          const jsonStr = buffer.slice(6).trim();
+          if (jsonStr) {
+            const data = JSON.parse(jsonStr);
+            if (data.type === 'complete') {
+              setCollectedResult(data.collectedResult);
+              setAllPagesData(data.allPagesData);
+              setProcessingPhase('complete');
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing final buffer:', e);
+        }
+      }
+      
+      setLoading(false);
+      isProcessingRef.current = false;
       
     } catch (err) {
-      console.error('Selected processing error:', err);
-      setError(err.message || 'An error occurred while processing selected images');
+      if (err.name === 'AbortError') {
+        console.log('AI analysis was cancelled');
+        setError('Analysis was cancelled');
+        setProcessingStatus('Cancelled');
+      } else {
+        console.error('AI analysis error:', err);
+        setError(err.message || 'An error occurred during AI analysis');
+        setProcessingStatus('Error occurred');
+      }
       setLoading(false);
       isProcessingRef.current = false;
       setProcessingPhase('selection');
-      setShowImageSelection(true);
     } finally {
       readerRef.current = null;
+      abortControllerRef.current = null;
     }
   };
 
-  // Handle extract all
-  const handleExtractAll = async (allImages) => {
-    const selectedPageNumbers = allImages.map(img => img.pageNumber);
-    const pageNumberObjects = selectedPageNumbers.map(pageNum => ({ pageNumber: pageNum }));
-    await handleProcessSelected(pageNumberObjects);
+  // Handle extract all (shortcut for all valid images)
+  const handleExtractAll = async () => {
+    const allValidImages = availableImages.filter(img => !img.conversionError);
+    await handleProcessSelected(allValidImages);
   };
 
+  // Calculate grand totals like the old system
   const calculateGrandTotals = () => {
     if (!collectedResult) return null;
 
-    const calculateTotal = (data) => data.reduce((sum, item) => sum + (parseFloat(item.totalAmount) || 0), 0);
+    const calculateTotal = (data) => data.reduce((sum, item) => {
+      // Handle both TOTALAMOUNT (CAPITAL) and totalAmount (camelCase)
+      const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
+      return sum + amount;
+    }, 0);
 
     const labourTotal = calculateTotal(collectedResult.labour);
     const labourTimesheetTotal = calculateTotal(collectedResult.labourTimesheet);
@@ -511,118 +592,211 @@ function InvoiceExtractor({ user, onLogout }) {
     };
   };
 
-  const downloadJSON = () => {
-    const dataToDownload = {
-      collectedResult,
-      allPagesData,
-      totals: calculateGrandTotals(),
-      metadata: {
-        fileName: file?.name,
-        processedBy: user.email,
-        processedAt: new Date().toISOString()
-      }
-    };
-    const dataStr = JSON.stringify(dataToDownload, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `extracted_data_${Date.now()}.json`;
-    link.click();
-  };
+  const exportToExcel = () => {
+    if (!collectedResult) return;
 
-  const downloadExcel = () => {
     const wb = XLSX.utils.book_new();
     const totals = calculateGrandTotals();
 
+    // Enhanced styling to match your old system
+    const titleStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 16 },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+    
+    const headerStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+    
+    const dataStyle = {
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "CCCCCC" } },
+        bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+        left: { style: "thin", color: { rgb: "CCCCCC" } },
+        right: { style: "thin", color: { rgb: "CCCCCC" } }
+      }
+    };
+    
+    const totalStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFFBF0" } },
+      font: { bold: true, color: { rgb: "000000" }, sz: 12 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thick", color: { rgb: "000000" } },
+        bottom: { style: "thick", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    // Simplified Totals Summary sheet
     const totalsData = [
-      ['GNC Invoice Data'],
+      ['GNC Invoice'],
+      [''],
       [`Processed by: ${user.email}`],
       [`File: ${file?.name || 'Unknown'}`],
-      [`Date: ${new Date().toLocaleDateString()}`],
-      [],
-      ['Category', 'Items', 'Total Amount'],
-      ['Labour', collectedResult.labour.length, `${totals.labour.toFixed(2)}`],
-      ['Labour Timesheet', collectedResult.labourTimesheet.length, `${totals.labourTimesheet.toFixed(2)}`],
-      ['Material', collectedResult.material.length, `${totals.material.toFixed(2)}`],
-      ['Equipment', collectedResult.equipment.length, `${totals.equipment.toFixed(2)}`],
-      ['Equipment Log', collectedResult.equipmentLog.length, `${totals.equipmentLog.toFixed(2)}`],
-      ['Consumables', collectedResult.consumables.length, `${totals.consumables.toFixed(2)}`],
-      ['Subtrade', collectedResult.subtrade.length, `${totals.subtrade.toFixed(2)}`],
-      ['', '', ''],
+      [''],
+      ['Category', 'Total Items', 'Total Amount ($)'],
+      ['Labour', collectedResult.labour.length, totals.labour.toFixed(2)],
+      ['Labour Timesheet', collectedResult.labourTimesheet.length, totals.labourTimesheet.toFixed(2)],
+      ['Material', collectedResult.material.length, totals.material.toFixed(2)],
+      ['Equipment', collectedResult.equipment.length, totals.equipment.toFixed(2)],
+      ['Equipment Log', collectedResult.equipmentLog.length, totals.equipmentLog.toFixed(2)],
+      ['Consumables', collectedResult.consumables.length, totals.consumables.toFixed(2)],
+      ['Subtrade', collectedResult.subtrade.length, totals.subtrade.toFixed(2)],
+      [''],
       ['GRAND TOTAL', 
         collectedResult.labour.length + collectedResult.labourTimesheet.length +
         collectedResult.material.length + collectedResult.equipment.length + 
         collectedResult.equipmentLog.length + collectedResult.consumables.length + 
         collectedResult.subtrade.length,
-        `${totals.grandTotal.toFixed(2)}`
+        totals.grandTotal.toFixed(2)
       ]
     ];
 
     const totalsWS = XLSX.utils.aoa_to_sheet(totalsData);
     
+    // Enhanced merging and styling for totals sheet
     if (!totalsWS['!merges']) totalsWS['!merges'] = [];
-    totalsWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+    totalsWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }); // Title
     
-    const cellStyle = {
-      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14 },
-      alignment: { horizontal: "center", vertical: "center" }
-    };
+    // Apply enhanced styles
+    if (totalsWS['A1']) totalsWS['A1'].s = titleStyle;
     
-    const headerCellStyle = {
-      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
-      alignment: { horizontal: "center", vertical: "center" }
-    };
-    
-    if (totalsWS['A1']) totalsWS['A1'].s = cellStyle;
-    
+    // Header row styles
     ['A6', 'B6', 'C6'].forEach(cell => {
-      if (totalsWS[cell]) totalsWS[cell].s = headerCellStyle;
+      if (totalsWS[cell]) totalsWS[cell].s = headerStyle;
+    });
+    
+    // Grand total row styles - simple black styling
+    ['A15', 'B15', 'C15'].forEach(cell => {
+      if (totalsWS[cell]) totalsWS[cell].s = totalStyle;
     });
 
+    // Enhanced column widths
     totalsWS['!cols'] = [
-      { wch: 40 },
-      { wch: 30 },
-      { wch: 40 }
+      { wch: 25 }, // Category
+      { wch: 15 }, // Items  
+      { wch: 20 }  // Amount
     ];
 
-    XLSX.utils.book_append_sheet(wb, totalsWS, 'Totals');
+    // Add Totals sheet first
+    XLSX.utils.book_append_sheet(wb, totalsWS, 'Summary');
 
+    // Create enhanced worksheets for each category
     const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
     
     categories.forEach(category => {
       const data = collectedResult[category];
       if (data && data.length > 0) {
-        const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))];
+        // Filter out userId, sessionId, and pageNumber from display columns
+        const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))].filter(key => 
+          key !== 'userId' && 
+          key !== 'sessionId' && 
+          key !== 'pageNumber'
+        );
         
+        // Simplified sheet header
         const sheetData = [
-          ['GNC Invoice Data'],
+          ['GNC Invoice'],
+          [''],
           [`Processed by: ${user.email}`],
-          [`Category: ${category}`],
-          [],
-          allKeys
+          [`Category: ${category.charAt(0).toUpperCase() + category.slice(1)}`],
+          [`Items Count: ${data.length}`],
+          [''],
+          // Headers with proper formatting
+          allKeys.map(key => key.replace(/([A-Z])/g, ' $1').trim())
         ];
         
+        // Add data rows
         data.forEach(row => {
-          sheetData.push(allKeys.map(key => row[key] || ''));
+          sheetData.push(allKeys.map(key => row[key] !== null && row[key] !== undefined ? row[key] : ''));
         });
+
+        // Enhanced total section
+        const categoryTotal = data.reduce((sum, item) => {
+          const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
+          return sum + amount;
+        }, 0);
+
+        if (categoryTotal > 0) {
+          sheetData.push(['']); // Separator
+          sheetData.push(['']); // Extra space
+          
+          // Category total summary section
+          const totalHeaderRow = allKeys.map((key, index) => {
+            if (index === 0) return `${category.toUpperCase()} CATEGORY TOTAL`;
+            else if (index === 1) return 'SUMMARY';
+            return '';
+          });
+          sheetData.push(totalHeaderRow);
+          
+          const totalDataRow = allKeys.map((key, index) => {
+            if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+              return `$${categoryTotal.toFixed(2)}`;
+            } else if (index === 1) {
+              return `${data.length} items`;
+            } else if (index === 2) {
+              return `Total: $${categoryTotal.toFixed(2)}`;
+            }
+            return '';
+          });
+          sheetData.push(totalDataRow);
+        }
         
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         
+        // Enhanced merging
         if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: allKeys.length - 1 } });
+        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, allKeys.length - 1) } });
         
-        if (ws['A1']) ws['A1'].s = cellStyle;
+        // Apply enhanced styles
+        if (ws['A1']) ws['A1'].s = titleStyle;
         
+        // Header row styles
         allKeys.forEach((_, idx) => {
-          const cellRef = XLSX.utils.encode_cell({ r: 4, c: idx });
-          if (ws[cellRef]) ws[cellRef].s = headerCellStyle;
+          const cellRef = XLSX.utils.encode_cell({ r: 6, c: idx });
+          if (ws[cellRef]) ws[cellRef].s = headerStyle;
         });
         
-        ws['!cols'] = allKeys.map(() => ({ wch: 20 }));
+        // Data row styles
+        for (let rowIdx = 7; rowIdx < sheetData.length - (categoryTotal > 0 ? 4 : 0); rowIdx++) {
+          allKeys.forEach((_, colIdx) => {
+            const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+            if (ws[cellRef]) ws[cellRef].s = dataStyle;
+          });
+        }
         
+        // Total section styles
+        if (categoryTotal > 0) {
+          const totalRowStart = sheetData.length - 2;
+          allKeys.forEach((_, colIdx) => {
+            const cellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: colIdx });
+            const cellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: colIdx });
+            if (ws[cellRef1]) ws[cellRef1].s = totalStyle;
+            if (ws[cellRef2]) ws[cellRef2].s = totalStyle;
+          });
+        }
+        
+        // Enhanced column widths
+        ws['!cols'] = allKeys.map(key => {
+          if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
+          if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
+          if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
+          return { wch: 20 };
+        });
+        
+        // Create proper sheet name
         const sheetName = category === 'labourTimesheet' ? 'LabourTimesheet' :
                          category === 'equipmentLog' ? 'EquipmentLog' :
                          category.charAt(0).toUpperCase() + category.slice(1);
@@ -631,15 +805,8 @@ function InvoiceExtractor({ user, onLogout }) {
       }
     });
 
-    const fileName = `invoice_data_${user.email.split('@')[0]}_${Date.now()}.xlsx`;
+    const fileName = `GNC_Invoice_${user.email.split('@')[0]}_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, fileName);
-  };
-
-  const handleViewPageReference = (pageNumber) => {
-    const pageData = allPagesData.find(p => p.pageNumber === pageNumber);
-    if (pageData) {
-      setSelectedRowImage(pageData.imageUrl);
-    }
   };
 
   const getCurrentData = () => {
@@ -647,82 +814,39 @@ function InvoiceExtractor({ user, onLogout }) {
       return collectedResult;
     } else {
       const pageData = allPagesData.find(p => p.pageNumber === selectedPage);
-      return pageData?.data || null;
+      return pageData ? pageData.data : null;
     }
   };
 
   const getCurrentRawOutput = () => {
     if (viewMode === 'individual') {
       const pageData = allPagesData.find(p => p.pageNumber === selectedPage);
-      return pageData?.rawOutput || 'No raw output available';
+      return pageData ? pageData.rawOutput : 'No data available';
     }
-    return null;
+    return 'Raw output only available in individual page view';
   };
 
   const getCurrentImageUrl = () => {
     if (viewMode === 'individual') {
       const pageData = allPagesData.find(p => p.pageNumber === selectedPage);
-      return pageData?.imageUrl || null;
+      return pageData ? pageData.imageUrl : null;
     }
     return null;
   };
 
-  const totals = calculateGrandTotals();
-  const pagesWithErrors = allPagesData.filter(p => p.error);
+  const availablePages = allPagesData.map(p => p.pageNumber).sort((a, b) => a - b);
+
+  const handleViewPageReference = (pageNumber) => {
+    const pageData = allPagesData.find(p => p.pageNumber === pageNumber);
+    if (pageData && pageData.imageUrl) {
+      setSelectedRowImage(pageData.imageUrl);
+    } else {
+      alert(`Image not available for page ${pageNumber}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Cancel Confirmation Modal */}
-      <AnimatePresence>
-        {showCancelConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-sm px-4"
-            onClick={() => setShowCancelConfirm(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="bg-zinc-900 p-6 sm:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-zinc-800"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center mb-6">
-                <div className="bg-yellow-900 bg-opacity-30 p-3 rounded-xl mr-4 border border-yellow-800">
-                  <svg className="w-6 sm:w-7 h-6 sm:h-7 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg sm:text-xl font-bold text-white">Cancel Processing?</h3>
-              </div>
-              <p className="text-gray-400 mb-8 leading-relaxed text-sm sm:text-base">
-                Processing is currently in progress. Are you sure you want to cancel? 
-                <span className="block mt-2 font-semibold text-white">
-                  All progress will be lost.
-                </span>
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowCancelConfirm(false)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-semibold border border-zinc-700 transition-colors"
-                >
-                  Continue Processing
-                </button>
-                <button
-                  onClick={location.state?.fromBack ? handleNavigateBack : confirmCancel}
-                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
-                >
-                  {location.state?.fromBack ? 'Cancel & Go Back' : 'Cancel Processing'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Navbar */}
       <nav className="bg-black border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -737,14 +861,6 @@ function InvoiceExtractor({ user, onLogout }) {
                 <Link 
                   to="/dashboard" 
                   className="text-gray-400 hover:text-white font-medium transition-colors"
-                  onClick={(e) => {
-                    if (isProcessingRef.current) {
-                      e.preventDefault();
-                      setShowCancelConfirm(true);
-                    } else if (currentSessionIdRef.current) {
-                      cleanupCurrentSession();
-                    }
-                  }}
                 >
                   Dashboard
                 </Link>
@@ -769,9 +885,8 @@ function InvoiceExtractor({ user, onLogout }) {
         </div>
       </nav>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* File Upload - Show when in upload phase */}
+        {/* File Upload - Only show when in upload phase */}
         {processingPhase === 'upload' && (
           <FileUpload
             file={file}
@@ -786,39 +901,29 @@ function InvoiceExtractor({ user, onLogout }) {
           />
         )}
 
-        {/* Image Selection - Show when images are ready for selection */}
-        {showImageSelection && processingPhase === 'selection' && (
-          <ImageSelection
-            images={availableImages}
-            onProcessSelected={handleProcessSelected}
-            onSelectAll={handleExtractAll}
-            loading={loading}
-          />
-        )}
-
-        {/* Processing Status - Show during processing phase */}
-        {processingPhase === 'processing' && (
+        {/* Processing Status during conversion */}
+        {processingPhase === 'converting' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 shadow-xl"
           >
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-              <p className="mt-4 text-gray-300 font-semibold">
-                {processingStatus || `Processing page ${progress.current} of ${progress.total}...`}
-              </p>
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <h2 className="text-2xl font-bold text-white mt-4 mb-2">Converting PDF to Images</h2>
+              <p className="text-gray-300 mb-4">{processingStatus}</p>
+              
               {progress.total > 0 && (
                 <>
-                  <div className="w-full bg-zinc-800 rounded-full h-3 mt-4 max-w-md mx-auto">
+                  <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
                     <div
                       className="bg-blue-600 h-3 rounded-full transition-all duration-300"
                       style={{ width: `${(progress.current / progress.total) * 100}%` }}
                     ></div>
                   </div>
                   <p className="mt-2 text-sm text-gray-400">
-                    {Math.round((progress.current / progress.total) * 100)}% Complete
+                    {Math.round((progress.current / progress.total) * 100)}% Complete ({progress.current}/{progress.total} pages)
                   </p>
                 </>
               )}
@@ -833,120 +938,160 @@ function InvoiceExtractor({ user, onLogout }) {
           </motion.div>
         )}
 
-        {/* Results - Show when processing is complete */}
-        {collectedResult && processingPhase === 'complete' && (
+        {/* OPTIMIZED: Image Selection with Real-time Streaming */}
+        {showImageSelection && processingPhase === 'selection' && (
+          <ImageSelection
+            images={availableImages}
+            onProcessSelected={handleProcessSelected}
+            onSelectAll={handleExtractAll}
+            loading={loading}
+            onUploadNew={handleUploadNew}
+            conversionStatus={conversionStatus}
+          />
+        )}
+
+        {/* Processing Status - Show during AI analysis phase */}
+        {processingPhase === 'processing' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-xl mt-6"
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 mb-8 shadow-xl"
           >
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white">Extracted Data</h2>
-                <p className="text-sm text-gray-400 mt-1">Processed by {user.email}</p>
-              </div>
-              <div className="flex gap-3 flex-wrap">
-                {/* Upload New File Button */}
-                <button
-                  onClick={resetToUpload}
-                  className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Upload New File
-                </button>
-                <button
-                  onClick={downloadJSON}
-                  className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
-                >
-                  Download JSON
-                </button>
-                <button
-                  onClick={downloadExcel}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
-                >
-                  Download Excel
-                </button>
-              </div>
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+              <h2 className="text-2xl font-bold text-white mt-4 mb-2">AI Analysis in Progress</h2>
+              <p className="text-gray-300 mb-4">{processingStatus}</p>
+              
+              {progress.total > 0 && (
+                <>
+                  <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
+                    <div
+                      className="bg-green-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    {Math.round((progress.current / progress.total) * 100)}% Complete ({progress.current}/{progress.total} pages)
+                  </p>
+                </>
+              )}
+              
+              <button
+                onClick={handleCancelClick}
+                className="mt-6 bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg font-semibold transition-colors"
+              >
+                Cancel Analysis
+              </button>
             </div>
+          </motion.div>
+        )}
 
-            <div className="mb-6 flex items-center gap-4 flex-wrap">
-              <div className="flex bg-zinc-800 rounded-lg p-1">
+        {/* Results Display */}
+        {processingPhase === 'complete' && collectedResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+          >
+            {/* Header with controls */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Extraction Results</h2>
+                  <p className="text-gray-400">Data extracted successfully from your PDF</p>
+                </div>
+                
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleUploadNew}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white py-2 px-4 rounded-lg font-medium transition-colors border border-zinc-700"
+                  >
+                    📄 Upload New File
+                  </button>
+                  <button
+                    onClick={exportToExcel}
+                    className="bg-green-600 hover:bg-green-700 text-white py-2 px-6 rounded-lg font-semibold transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export to Excel
+                  </button>
+                </div>
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="mt-6 flex flex-wrap gap-2">
                 <button
-                  onClick={() => {
-                    setViewMode('collected');
-                    setShowRaw(false);
-                    setActiveTab('totals');
-                  }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  onClick={() => setViewMode('collected')}
+                  className={`py-2 px-4 rounded-lg font-medium transition-colors ${
                     viewMode === 'collected'
-                      ? 'bg-zinc-700 text-white shadow'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-zinc-800 text-gray-300 hover:bg-zinc-700 border border-zinc-700'
                   }`}
                 >
-                  All Pages Combined
+                  📊 All Data Combined
                 </button>
                 <button
                   onClick={() => setViewMode('individual')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`py-2 px-4 rounded-lg font-medium transition-colors ${
                     viewMode === 'individual'
-                      ? 'bg-zinc-700 text-white shadow'
-                      : 'text-gray-400 hover:text-white'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-zinc-800 text-gray-300 hover:bg-zinc-700 border border-zinc-700'
                   }`}
                 >
-                  Individual Pages
+                  📄 Individual Pages
                 </button>
-              </div>
-
-              {viewMode === 'individual' && allPagesData.length > 0 && (
-                <>
+                
+                {viewMode === 'individual' && availablePages.length > 0 && (
                   <select
                     value={selectedPage}
-                    onChange={(e) => setSelectedPage(Number(e.target.value))}
-                    className="px-4 py-2 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setSelectedPage(parseInt(e.target.value))}
+                    className="bg-zinc-800 border border-zinc-700 text-white py-2 px-4 rounded-lg"
                   >
-                    {allPagesData.map(page => (
-                      <option key={page.pageNumber} value={page.pageNumber}>
-                        Page {page.pageNumber} {page.error ? 'X' : ''}
+                    {availablePages.map(pageNum => (
+                      <option key={pageNum} value={pageNum}>
+                        Page {pageNum}
                       </option>
                     ))}
                   </select>
-
-                  <button
-                    onClick={() => setShowImage(!showImage)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      showImage
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-zinc-800 text-gray-400 hover:text-white border border-zinc-700'
-                    }`}
-                  >
-                    {showImage ? 'Hide' : 'Show'} Image
-                  </button>
-
-                  <button
-                    onClick={() => setShowRaw(!showRaw)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      showRaw
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-zinc-800 text-gray-400 hover:text-white border border-zinc-700'
-                    }`}
-                  >
-                    {showRaw ? 'Hide' : 'Show'} Raw Output
-                  </button>
-                </>
-              )}
+                )}
+                
+                {viewMode === 'individual' && (
+                  <>
+                    <button
+                      onClick={() => setShowRaw(!showRaw)}
+                      className={`py-2 px-4 rounded-lg font-medium transition-colors ${
+                        showRaw
+                          ? 'bg-green-600 text-white'
+                          : 'bg-zinc-800 text-gray-300 hover:bg-zinc-700 border border-zinc-700'
+                      }`}
+                    >
+                      {showRaw ? '🔍 Hide Raw' : '🔍 Show Raw'}
+                    </button>
+                    <button
+                      onClick={() => setShowImage(!showImage)}
+                      className={`py-2 px-4 rounded-lg font-medium transition-colors ${
+                        showImage
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-zinc-800 text-gray-300 hover:bg-zinc-700 border border-zinc-700'
+                      }`}
+                    >
+                      {showImage ? '🖼️ Hide Image' : '🖼️ Show Image'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
+            {/* Row image modal */}
             {selectedRowImage && (
-              <div 
-                className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
-                onClick={() => setSelectedRowImage(null)}
-              >
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl max-h-full overflow-auto p-4">
+              <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 max-w-4xl max-h-full overflow-auto">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-white">Page Reference</h3>
+                    <h3 className="text-lg font-semibold text-white">Page Reference Image</h3>
                     <button
                       onClick={() => setSelectedRowImage(null)}
                       className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
@@ -1032,26 +1177,68 @@ function InvoiceExtractor({ user, onLogout }) {
               </nav>
             </div>
 
-            {activeTab === 'totals' && viewMode === 'collected' && totals && (
-              <TotalsSummary 
-                collectedResult={collectedResult} 
-                pageErrors={pagesWithErrors}
-              />
-            )}
-
-            {activeTab !== 'totals' && (
-              <div className="mt-4">
-                {getCurrentData() && (
-                  <DataTable
-                    data={getCurrentData()[activeTab]}
-                    type={activeTab}
-                    onViewPageReference={handleViewPageReference}
-                  />
-                )}
-              </div>
-            )}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+              {activeTab === 'totals' && viewMode === 'collected' ? (
+                <TotalsSummary 
+                  collectedResult={collectedResult}
+                  pageErrors={allPagesData.filter(p => p.error).map(p => ({ pageNumber: p.pageNumber, error: p.error }))}
+                />
+              ) : (
+                <DataTable 
+                  data={getCurrentData()?.[activeTab] || []}
+                  type={activeTab}
+                  onViewPageReference={handleViewPageReference}
+                />
+              )}
+            </div>
           </motion.div>
         )}
+
+        {/* Cancel Confirmation Modal */}
+        <AnimatePresence>
+          {showCancelConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-sm px-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="bg-zinc-900 p-6 sm:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-zinc-800"
+              >
+                <div className="text-center">
+                  <div className="bg-red-900 bg-opacity-30 p-3 rounded-xl mb-4 inline-block">
+                    <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Cancel Processing?</h3>
+                  <p className="text-gray-400 mb-6">
+                    This will stop the current processing and you'll lose any progress. Are you sure?
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => setShowCancelConfirm(false)}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-semibold border border-zinc-700 transition-colors"
+                    >
+                      Continue Processing
+                    </button>
+                    <button
+                      onClick={confirmCancel}
+                      className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
+                    >
+                      Yes, Cancel
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

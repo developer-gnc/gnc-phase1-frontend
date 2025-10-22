@@ -1,8 +1,9 @@
 function TotalsSummary({ collectedResult, pageErrors }) {
-  // Calculate totals only from totalAmount field
+  // Calculate totals only from TOTALAMOUNT field (handle both CAPITAL and camelCase)
   const calculateCategoryTotal = (categoryData) => {
     return categoryData.reduce((sum, item) => {
-      const amount = parseFloat(item.totalAmount) || 0;
+      // Handle both TOTALAMOUNT (CAPITAL) and totalAmount (camelCase) for backward compatibility
+      const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
       return sum + amount;
     }, 0);
   };
