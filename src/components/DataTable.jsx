@@ -1,9 +1,9 @@
-function DataTable({ data, type, onViewPageReference, pageErrors }) {
+function DataTable({ data, type, onViewPageReference, pageErrors, documentName }) {
     if (!data || data.length === 0) {
       return <p className="text-gray-500 text-center py-8">No {type} data found</p>;
     }
   
-    // Get all unique keys and filter out userId, sessionId, and pageNumber from display columns
+    // Get all unique keys and filter out userId, sessionId, and pageNumber
     const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))];
     const keys = allKeys.filter(key => 
       key !== 'userId' && 
@@ -11,9 +11,11 @@ function DataTable({ data, type, onViewPageReference, pageErrors }) {
       key !== 'pageNumber'
     );
     
+    // Add pageNumber and referenceDocument at the END
+    const orderedKeys = [...keys, 'pageNumber', 'referenceDocument'];
+    
     const calculateCategoryTotal = (data) => {
       return data.reduce((sum, item) => {
-        // Handle both TOTALAMOUNT (CAPITAL) and totalAmount (camelCase) for backward compatibility
         const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
         return sum + amount;
       }, 0);
@@ -51,12 +53,14 @@ function DataTable({ data, type, onViewPageReference, pageErrors }) {
               <tr>
                 {data.some(row => row.pageNumber) && (
                   <th className="px-4 py-3 border-b text-left text-sm font-bold text-gray-700 sticky left-0 bg-gray-100 z-10">
-                    Page Reference
+                    Page View
                   </th>
                 )}
-                {keys.map((key) => (
+                {orderedKeys.map((key) => (
                   <th key={key} className="px-4 py-3 border-b text-left text-sm font-bold text-gray-700 whitespace-nowrap">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                    {key === 'pageNumber' ? 'Page Number' :
+                     key === 'referenceDocument' ? 'Reference Document' :
+                     key.replace(/([A-Z])/g, ' $1').trim()}
                   </th>
                 ))}
               </tr>
@@ -70,13 +74,21 @@ function DataTable({ data, type, onViewPageReference, pageErrors }) {
                         onClick={() => onViewPageReference(row.pageNumber)}
                         className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
                       >
-                        📄 Page {row.pageNumber}
+                        📄 View
                       </button>
                     </td>
                   )}
-                  {keys.map((key) => (
+                  {orderedKeys.map((key) => (
                     <td key={key} className="px-4 py-3 border-b text-sm text-gray-700 whitespace-nowrap">
-                      {row[key] !== null && row[key] !== undefined ? row[key] : '-'}
+                      {key === 'referenceDocument' ? (
+                        <span className="text-blue-600 font-medium">
+                          {documentName || 'Document.pdf'}
+                        </span>
+                      ) : key === 'pageNumber' ? (
+                        row[key] !== null && row[key] !== undefined ? row[key] : '-'
+                      ) : (
+                        row[key] !== null && row[key] !== undefined ? row[key] : '-'
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -85,7 +97,6 @@ function DataTable({ data, type, onViewPageReference, pageErrors }) {
           </table>
         </div>
 
-        {/* Category Total Summary */}
         <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg border-2 border-yellow-400">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>

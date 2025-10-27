@@ -27,6 +27,7 @@ function InvoiceExtractor({ user, onLogout }) {
   const [processingStatus, setProcessingStatus] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   
   // OPTIMIZED: Image selection state with real-time streaming
   const [showImageSelection, setShowImageSelection] = useState(false);
@@ -151,6 +152,18 @@ function InvoiceExtractor({ user, onLogout }) {
       }
     }
   }, [viewMode, allPagesData, selectedPage]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('.export-menu-container')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -592,6 +605,185 @@ function InvoiceExtractor({ user, onLogout }) {
     };
   };
 
+  // CONSOLIDATED EXPORT - All data in single sheet WITH TOTAL ROW
+  const exportToConsolidatedExcel = () => {
+    if (!collectedResult) return;
+
+    const wb = XLSX.utils.book_new();
+
+    const titleStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "0586ba" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 16 , name: "Source Sans Pro" },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+    
+    const headerStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "0586ba" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 , name: "Source Sans Pro"},
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+    
+    const dataStyle = {
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "CCCCCC" } },
+        bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+        left: { style: "thin", color: { rgb: "CCCCCC" } },
+        right: { style: "thin", color: { rgb: "CCCCCC" } }
+      }
+    };
+
+    // NEW: Total row style - similar to other sheets
+    const totalStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFFBF0" } },
+      font: { bold: true, color: { rgb: "000000" }, sz: 12 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thick", color: { rgb: "000000" } },
+        bottom: { style: "thick", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    // Combine all categories into single dataset
+    const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
+    const allData = [];
+    
+    categories.forEach(category => {
+      const categoryData = collectedResult[category];
+      if (categoryData && categoryData.length > 0) {
+        categoryData.forEach(row => {
+          allData.push({
+            category: category === 'labourTimesheet' ? 'Labour Timesheet' :
+                     category === 'equipmentLog' ? 'Equipment Log' :
+                     category.charAt(0).toUpperCase() + category.slice(1),
+            ...row
+          });
+        });
+      }
+    });
+
+    if (allData.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Get all unique keys from combined data
+    const allKeys = [...new Set(allData.flatMap(row => Object.keys(row)))].filter(key => 
+      key !== 'userId' && 
+      key !== 'sessionId'
+    );
+
+    // Reorder: category first, then other fields, then pageNumber and referenceDocument at end
+    let orderedKeys = ['category'];
+    allKeys.forEach(key => {
+      if (key !== 'category' && key !== 'pageNumber') {
+        orderedKeys.push(key);
+      }
+    });
+    if (allKeys.includes('pageNumber')) {
+      orderedKeys.push('pageNumber');
+    }
+    orderedKeys.push('referenceDocument');
+
+    // Create consolidated sheet
+    const sheetData = [
+      ['GNC Invoice - Consolidated Data'],
+      [''],
+      [`Document: ${file?.name || 'Unknown'}`],
+      [`Processed by: ${user.email}`],
+      [`Total Items: ${allData.length}`],
+      [''],
+      orderedKeys.map(key => {
+        if (key === 'category') return 'Category';
+        if (key === 'pageNumber') return 'Page Number';
+        if (key === 'referenceDocument') return 'Reference Document';
+        return key.replace(/([A-Z])/g, ' $1').trim();
+      })
+    ];
+
+    // Add all data rows
+    allData.forEach(row => {
+      sheetData.push(orderedKeys.map(key => {
+        if (key === 'referenceDocument') return file?.name || 'Document.pdf';
+        return row[key] !== null && row[key] !== undefined ? row[key] : '';
+      }));
+    });
+
+    // NEW: Calculate and add total row
+    const grandTotal = allData.reduce((sum, item) => {
+      const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
+      return sum + amount;
+    }, 0);
+
+    // Add empty separator row
+    sheetData.push(['']);
+    
+    // Add total row
+    const totalRow = orderedKeys.map((key, index) => {
+      if (index === 0) return 'GRAND TOTAL'; // First column shows "GRAND TOTAL"
+      if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+        return `$${grandTotal.toFixed(2)}`;
+      }
+      if (index === 1) return `${allData.length} items`; // Second column shows item count
+      return ''; // All other columns empty
+    });
+    sheetData.push(totalRow);
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // Apply styling
+    if (!ws['!merges']) ws['!merges'] = [];
+    ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length - 1) } });
+
+    if (ws['A1']) ws['A1'].s = titleStyle;
+
+    // Header row styles
+    orderedKeys.forEach((_, idx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 6, c: idx });
+      if (ws[cellRef]) ws[cellRef].s = headerStyle;
+    });
+
+    // Data row styles (excluding the total row)
+    for (let rowIdx = 7; rowIdx < sheetData.length - 2; rowIdx++) {
+      orderedKeys.forEach((_, colIdx) => {
+        const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+        if (ws[cellRef]) ws[cellRef].s = dataStyle;
+      });
+    }
+
+    // NEW: Apply total row styles
+    const totalRowIndex = sheetData.length - 1;
+    orderedKeys.forEach((_, colIdx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: colIdx });
+      if (ws[cellRef]) ws[cellRef].s = totalStyle;
+    });
+
+    // Column widths
+    ws['!cols'] = orderedKeys.map(key => {
+      if (key === 'category') return { wch: 18 };
+      if (key === 'pageNumber') return { wch: 12 };
+      if (key === 'referenceDocument') return { wch: 30 };
+      if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
+      if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
+      if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
+      return { wch: 20 };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Consolidated Data');
+
+    const fileName = `GNC_Invoice_Consolidated_${user.email.split('@')[0]}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    setShowExportMenu(false);
+  };
+
   const exportToExcel = () => {
     if (!collectedResult) return;
 
@@ -600,14 +792,14 @@ function InvoiceExtractor({ user, onLogout }) {
 
     // Enhanced styling to match your old system
     const titleStyle = {
-      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
+      fill: { patternType: "solid", fgColor: { rgb: "0586ba" } },
       font: { bold: true, color: { rgb: "FFFFFF" }, sz: 16 },
       alignment: { horizontal: "center", vertical: "center" }
     };
     
     const headerStyle = {
-      fill: { patternType: "solid", fgColor: { rgb: "006666" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+      fill: { patternType: "solid", fgColor: { rgb: "0586ba" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 , name: "Source Sans Pro"},
       alignment: { horizontal: "center", vertical: "center" },
       border: {
         top: { style: "thin", color: { rgb: "000000" } },
@@ -643,8 +835,8 @@ function InvoiceExtractor({ user, onLogout }) {
     const totalsData = [
       ['GNC Invoice'],
       [''],
+      [`Document: ${file?.name || 'Unknown'}`],
       [`Processed by: ${user.email}`],
-      [`File: ${file?.name || 'Unknown'}`],
       [''],
       ['Category', 'Total Items', 'Total Amount ($)'],
       ['Labour', collectedResult.labour.length, totals.labour.toFixed(2)],
@@ -699,28 +891,38 @@ function InvoiceExtractor({ user, onLogout }) {
     categories.forEach(category => {
       const data = collectedResult[category];
       if (data && data.length > 0) {
-        // Filter out userId, sessionId, and pageNumber from display columns
+        // Filter out userId and sessionId, keep pageNumber
         const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))].filter(key => 
           key !== 'userId' && 
-          key !== 'sessionId' && 
-          key !== 'pageNumber'
+          key !== 'sessionId'
         );
+        
+        // Add referenceDocument column at the end
+        const orderedKeys = [...allKeys, 'referenceDocument'];
         
         // Simplified sheet header
         const sheetData = [
           ['GNC Invoice'],
           [''],
+          [`Document: ${file?.name || 'Unknown'}`],
           [`Processed by: ${user.email}`],
           [`Category: ${category.charAt(0).toUpperCase() + category.slice(1)}`],
           [`Items Count: ${data.length}`],
           [''],
           // Headers with proper formatting
-          allKeys.map(key => key.replace(/([A-Z])/g, ' $1').trim())
+          orderedKeys.map(key => {
+            if (key === 'pageNumber') return 'Page Number';
+            if (key === 'referenceDocument') return 'Reference Document';
+            return key.replace(/([A-Z])/g, ' $1').trim();
+          })
         ];
         
         // Add data rows
         data.forEach(row => {
-          sheetData.push(allKeys.map(key => row[key] !== null && row[key] !== undefined ? row[key] : ''));
+          sheetData.push(orderedKeys.map(key => {
+            if (key === 'referenceDocument') return file?.name || 'Document.pdf';
+            return row[key] !== null && row[key] !== undefined ? row[key] : '';
+          }));
         });
 
         // Enhanced total section
@@ -734,14 +936,14 @@ function InvoiceExtractor({ user, onLogout }) {
           sheetData.push(['']); // Extra space
           
           // Category total summary section
-          const totalHeaderRow = allKeys.map((key, index) => {
+          const totalHeaderRow = orderedKeys.map((key, index) => {
             if (index === 0) return `${category.toUpperCase()} CATEGORY TOTAL`;
             else if (index === 1) return 'SUMMARY';
             return '';
           });
           sheetData.push(totalHeaderRow);
           
-          const totalDataRow = allKeys.map((key, index) => {
+          const totalDataRow = orderedKeys.map((key, index) => {
             if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
               return `$${categoryTotal.toFixed(2)}`;
             } else if (index === 1) {
@@ -758,20 +960,20 @@ function InvoiceExtractor({ user, onLogout }) {
         
         // Enhanced merging
         if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, allKeys.length - 1) } });
+        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length - 1) } });
         
         // Apply enhanced styles
         if (ws['A1']) ws['A1'].s = titleStyle;
         
         // Header row styles
-        allKeys.forEach((_, idx) => {
-          const cellRef = XLSX.utils.encode_cell({ r: 6, c: idx });
+        orderedKeys.forEach((_, idx) => {
+          const cellRef = XLSX.utils.encode_cell({ r: 7, c: idx });
           if (ws[cellRef]) ws[cellRef].s = headerStyle;
         });
         
         // Data row styles
-        for (let rowIdx = 7; rowIdx < sheetData.length - (categoryTotal > 0 ? 4 : 0); rowIdx++) {
-          allKeys.forEach((_, colIdx) => {
+        for (let rowIdx = 8; rowIdx < sheetData.length - (categoryTotal > 0 ? 4 : 0); rowIdx++) {
+          orderedKeys.forEach((_, colIdx) => {
             const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
             if (ws[cellRef]) ws[cellRef].s = dataStyle;
           });
@@ -780,7 +982,7 @@ function InvoiceExtractor({ user, onLogout }) {
         // Total section styles
         if (categoryTotal > 0) {
           const totalRowStart = sheetData.length - 2;
-          allKeys.forEach((_, colIdx) => {
+          orderedKeys.forEach((_, colIdx) => {
             const cellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: colIdx });
             const cellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: colIdx });
             if (ws[cellRef1]) ws[cellRef1].s = totalStyle;
@@ -789,7 +991,9 @@ function InvoiceExtractor({ user, onLogout }) {
         }
         
         // Enhanced column widths
-        ws['!cols'] = allKeys.map(key => {
+        ws['!cols'] = orderedKeys.map(key => {
+          if (key === 'pageNumber') return { wch: 12 };
+          if (key === 'referenceDocument') return { wch: 30 };
           if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
           if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
           if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
@@ -807,6 +1011,7 @@ function InvoiceExtractor({ user, onLogout }) {
 
     const fileName = `GNC_Invoice_${user.email.split('@')[0]}_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, fileName);
+    setShowExportMenu(false);
   };
 
   const getCurrentData = () => {
@@ -1000,7 +1205,7 @@ function InvoiceExtractor({ user, onLogout }) {
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-white mb-2">Extraction Results</h2>
-                  <p className="text-gray-400">Data extracted successfully from your PDF</p>
+                  <p className="text-gray-400">Document: <span className="text-blue-400 font-medium">{file?.name || 'Unknown Document'}</span></p>
                 </div>
                 
                 <div className="flex flex-wrap gap-3">
@@ -1010,15 +1215,41 @@ function InvoiceExtractor({ user, onLogout }) {
                   >
                     📄 Upload New File
                   </button>
-                  <button
-                    onClick={exportToExcel}
-                    className="bg-green-600 hover:bg-green-700 text-white py-2 px-6 rounded-lg font-semibold transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export to Excel
-                  </button>
+                  
+                  {/* Export Dropdown Menu */}
+                  <div className="relative export-menu-container">
+                    <button
+                      onClick={() => setShowExportMenu(!showExportMenu)}
+                      className="bg-green-600 hover:bg-green-700 text-white py-2 px-6 rounded-lg font-semibold transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export to Excel
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {showExportMenu && (
+                      <div className="absolute right-0 mt-2 w-72 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50">
+                        <button
+                          onClick={exportToConsolidatedExcel}
+                          className="w-full text-left px-4 py-3 hover:bg-zinc-700 transition-colors text-white border-b border-zinc-700"
+                        >
+                          <div className="font-semibold mb-1">📊 Consolidated (Single Sheet)</div>
+                          <div className="text-xs text-gray-400">All data in one sheet with category column</div>
+                        </button>
+                        <button
+                          onClick={exportToExcel}
+                          className="w-full text-left px-4 py-3 hover:bg-zinc-700 transition-colors text-white rounded-b-lg"
+                        >
+                          <div className="font-semibold mb-1">📑 Separate Sheets</div>
+                          <div className="text-xs text-gray-400">Each category in its own sheet + summary</div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -1188,6 +1419,8 @@ function InvoiceExtractor({ user, onLogout }) {
                   data={getCurrentData()?.[activeTab] || []}
                   type={activeTab}
                   onViewPageReference={handleViewPageReference}
+                  pageErrors={allPagesData.filter(p => p.error).map(p => ({ pageNumber: p.pageNumber, error: p.error }))}
+                  documentName={file?.name}
                 />
               )}
             </div>
