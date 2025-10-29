@@ -155,3 +155,5 @@ function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPag
 }
 
 export default ConsolidatedView;
+
+//updated
