@@ -20,6 +20,36 @@ function InvoiceExtractorSecondHalf(props) {
     user, onLogout
   } = props;
 
+  // Helper function to identify currency columns - ONLY FOR EXCEL FORMATTING
+  const isCurrencyColumn = (fieldName) => {
+    const normalizedField = fieldName.toUpperCase().replace(/[^A-Z]/g, '');
+    const currencyColumns = ['UNITRATE', 'TAX', 'OP', 'RCV', 'DEPREC', 'ACV', 'TOTALAMOUNT'];
+    return currencyColumns.includes(normalizedField);
+  };
+
+  // Helper function to identify date columns - ONLY FOR EXCEL FORMATTING
+  const isDateColumn = (fieldName) => {
+    const normalizedField = fieldName.toUpperCase().replace(/[^A-Z]/g, '');
+    return normalizedField === 'DATE';
+  };
+
+  // Helper function to check if a value is numeric - ONLY FOR EXCEL FORMATTING
+  const isNumericValue = (value) => {
+    if (value === null || value === undefined || value === '') return false;
+    return !isNaN(parseFloat(value)) && isFinite(value);
+  };
+
+  // Helper function to check if a value is a date - ONLY FOR EXCEL FORMATTING
+  const isDateValue = (value) => {
+    if (value === null || value === undefined || value === '') return false;
+    // Check if it's already a Date object
+    if (value instanceof Date) return !isNaN(value);
+    // Check if it's a string that can be parsed as a date
+    const dateStr = String(value);
+    const parsedDate = new Date(dateStr);
+    return !isNaN(parsedDate) && dateStr.length > 0;
+  };
+
   // Calculate grand totals like the old system
   const calculateGrandTotals = () => {
     if (!collectedResult) return null;
@@ -273,13 +303,25 @@ function InvoiceExtractorSecondHalf(props) {
 
       // Data row styles (excluding the total row)
       for (let rowIdx = 7; rowIdx < consolidatedData.length - 2; rowIdx++) {
-        orderedKeys.forEach((colIdx, keyIndex) => {
+        orderedKeys.forEach((key, keyIndex) => {
           const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: keyIndex });
           if (consolidatedWS[cellRef]) {
-            // Check if this column contains amount data
-            const key = orderedKeys[keyIndex];
-            if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+            const cellValue = consolidatedData[rowIdx][keyIndex];
+            // Apply specific formatting based on column type
+            if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '"$"#,##0.00'; // Currency format
+            } else if (isDateColumn(key) && isDateValue(cellValue)) {
+              consolidatedWS[cellRef].z = 'dd-mm-yyyy'; // Date format
+              // Convert string dates to Excel date format if needed
+              if (typeof cellValue === 'string') {
+                const dateObj = new Date(cellValue);
+                if (!isNaN(dateObj)) {
+                  consolidatedWS[cellRef].v = dateObj;
+                  consolidatedWS[cellRef].t = 'd';
+                }
+              }
+            } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
+              consolidatedWS[cellRef].z = '#,##0.00'; // Number format without currency
             }
             consolidatedWS[cellRef].s = dataStyle;
           }
@@ -288,12 +330,11 @@ function InvoiceExtractorSecondHalf(props) {
 
       // Apply total row styles
       const totalRowIndex = consolidatedData.length - 1;
-      orderedKeys.forEach((_, colIdx) => {
+      orderedKeys.forEach((key, colIdx) => {
         const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: colIdx });
         if (consolidatedWS[cellRef]) {
-          // Check if this is the amount column in total row
-          const key = orderedKeys[colIdx];
-          if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+          // Check if this is a currency column in total row
+          if (isCurrencyColumn(key)) {
             consolidatedWS[cellRef].z = '"$"#,##0.00'; // Currency format
           }
           consolidatedWS[cellRef].s = totalStyle;
@@ -404,13 +445,25 @@ function InvoiceExtractorSecondHalf(props) {
         
         // Data row styles
         for (let rowIdx = 8; rowIdx < sheetData.length - (categoryTotal > 0 ? 4 : 0); rowIdx++) {
-          orderedKeys.forEach((_, colIdx) => {
+          orderedKeys.forEach((key, colIdx) => {
             const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
             if (ws[cellRef]) {
-              // Check if this column contains amount data
-              const key = orderedKeys[colIdx];
-              if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+              const cellValue = sheetData[rowIdx][colIdx];
+              // Apply specific formatting based on column type
+              if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '"$"#,##0.00'; // Currency format
+              } else if (isDateColumn(key) && isDateValue(cellValue)) {
+                ws[cellRef].z = 'dd-mm-yyyy'; // Date format
+                // Convert string dates to Excel date format if needed
+                if (typeof cellValue === 'string') {
+                  const dateObj = new Date(cellValue);
+                  if (!isNaN(dateObj)) {
+                    ws[cellRef].v = dateObj;
+                    ws[cellRef].t = 'd';
+                  }
+                }
+              } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
+                ws[cellRef].z = '#,##0.00'; // Number format without currency
               }
               ws[cellRef].s = dataStyle;
             }
@@ -420,13 +473,12 @@ function InvoiceExtractorSecondHalf(props) {
         // Total section styles
         if (categoryTotal > 0) {
           const totalRowStart = sheetData.length - 2;
-          orderedKeys.forEach((_, colIdx) => {
+          orderedKeys.forEach((key, colIdx) => {
             const cellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: colIdx });
             const cellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: colIdx });
             if (ws[cellRef1]) {
-              // Check if this column contains amount data
-              const key = orderedKeys[colIdx];
-              if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+              // Apply currency formatting to amount columns in totals
+              if (isCurrencyColumn(key)) {
                 ws[cellRef1].z = '"$"#,##0.00'; // Currency format
                 ws[cellRef2].z = '"$"#,##0.00'; // Currency format
               }
