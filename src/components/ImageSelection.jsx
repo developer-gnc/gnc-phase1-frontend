@@ -341,7 +341,7 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
             )}
             {validationResult.isValid && pageInput && finalPageList.length > 0 && (
               <p className="text-green-400 text-sm mt-2">
-                ✅ {finalPageList.length} pages {selectionMode === 'include' ? 'will be processed' : 'will be skipped'}
+                ✅ {finalPageList.length} pages {selectionMode === 'include' ? 'will be processed' : 'will be processed'}
               </p>
             )}
           </div>

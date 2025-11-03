@@ -311,7 +311,7 @@ function InvoiceExtractorSecondHalf(props) {
             if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '"$"#,##0.00'; // Currency format
             } else if (isDateColumn(key) && isDateValue(cellValue)) {
-              consolidatedWS[cellRef].z = 'dd-mm-yyyy'; // Date format
+              consolidatedWS[cellRef].z = 'dd/mm/yyyy'; // Date format
               // Convert string dates to Excel date format if needed
               if (typeof cellValue === 'string') {
                 const dateObj = new Date(cellValue);
@@ -453,7 +453,7 @@ function InvoiceExtractorSecondHalf(props) {
               if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '"$"#,##0.00'; // Currency format
               } else if (isDateColumn(key) && isDateValue(cellValue)) {
-                ws[cellRef].z = 'dd-mm-yyyy'; // Date format
+                ws[cellRef].z = 'dd/mm/yyyy'; // Date format
                 // Convert string dates to Excel date format if needed
                 if (typeof cellValue === 'string') {
                   const dateObj = new Date(cellValue);

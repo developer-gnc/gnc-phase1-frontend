@@ -54,7 +54,7 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
                 {file ? file.name : 'Click to upload PDF or drag and drop'}
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                Only PDF files are supported (Max 50MB)
+                Only PDF files are supported (Max 100MB)
               </p>
             </div>
           </label>
