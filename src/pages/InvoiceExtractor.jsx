@@ -1,12 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import * as XLSX from 'xlsx-js-style';
-import FileUpload from '../components/FileUpload';
-import ImageSelection from '../components/ImageSelection';
-import DataTable from '../components/DataTable';
-import TotalsSummary from '../components/TotalsSummary';
-import ConsolidatedView from '../components/ConsolidatedView';
 import { API_URL } from '../config/api';
 import api from '../config/api';
 import InvoiceExtractorSecondHalf from './InvoiceExtractorSecondHalf';

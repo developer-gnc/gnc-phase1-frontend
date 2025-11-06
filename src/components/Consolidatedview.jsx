@@ -1,64 +1,109 @@
-function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPageReference }) {
-  if (!collectedResult) {
+function ConsolidatedView({ collectedResult, allPagesData, pageErrors, documentName, onViewPageReference }) {
+  // Check if we have data - prioritize any available data source
+  if (!collectedResult && (!allPagesData || allPagesData.length === 0)) {
     return <p className="text-gray-500 text-center py-8">No data available</p>;
   }
 
-  // Combine all categories into single dataset
-  const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
-  const allData = [];
-  
-  categories.forEach(category => {
-    const categoryData = collectedResult[category];
-    if (categoryData && categoryData.length > 0) {
-      categoryData.forEach(row => {
-        allData.push({
-          category: category === 'labourTimesheet' ? 'Labour Timesheet' :
-                   category === 'equipmentLog' ? 'Equipment Log' :
-                   category.charAt(0).toUpperCase() + category.slice(1),
-          ...row
-        });
+  // Process raw data to flatten all entries while maintaining page order
+  const processRawData = () => {
+    // If we don't have allPagesData, fall back to old logic using collectedResult
+    if (!allPagesData || allPagesData.length === 0) {
+      if (!collectedResult) return [];
+      
+      // Fall back to the original logic
+      const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
+      const allData = [];
+      
+      categories.forEach(category => {
+        const categoryData = collectedResult[category];
+        if (categoryData && categoryData.length > 0) {
+          categoryData.forEach(row => {
+            allData.push({
+              category: category === 'labourTimesheet' ? 'Labour Timesheet' :
+                       category === 'equipmentLog' ? 'Equipment Log' :
+                       category.charAt(0).toUpperCase() + category.slice(1),
+              referenceDocument: documentName || 'Document.pdf',
+              ...row
+            });
+          });
+        }
+      });
+      
+      return allData.sort((a, b) => {
+        const pageA = a.pageNumber || 0;
+        const pageB = b.pageNumber || 0;
+        return pageA - pageB;
       });
     }
-  });
+    
+    const processedData = [];
+    
+    // Sort pages by page number to ensure correct order
+    const sortedPages = [...allPagesData].sort((a, b) => a.pageNumber - b.pageNumber);
+    
+    sortedPages.forEach(pageData => {
+      if (pageData.rawOutput) {
+        try {
+          // Parse the raw JSON output
+          let rawEntries = [];
+          
+          if (typeof pageData.rawOutput === 'string') {
+            rawEntries = JSON.parse(pageData.rawOutput);
+          } else if (Array.isArray(pageData.rawOutput)) {
+            rawEntries = pageData.rawOutput;
+          }
+          
+          // Process each entry from the raw JSON - NO SORTING, keep original order
+          rawEntries.forEach(entry => {
+            if (entry.data) {
+              const flattenedEntry = {
+                pageNumber: pageData.pageNumber,
+                category: entry.category || 'Unknown',
+                referenceDocument: documentName || 'Document.pdf',
+                ...entry.data // Spread all data properties directly
+              };
+              processedData.push(flattenedEntry);
+            }
+          });
+        } catch (error) {
+          console.error(`Error parsing raw output for page ${pageData.pageNumber}:`, error);
+        }
+      }
+    });
+    
+    return processedData;
+  };
 
-  if (allData.length === 0) {
+  const rawData = processRawData();
+
+  if (rawData.length === 0) {
     return <p className="text-gray-500 text-center py-8">No consolidated data found</p>;
   }
 
-  // Sort data by page number first, then by category
-  allData.sort((a, b) => {
-    const pageA = a.pageNumber || 0;
-    const pageB = b.pageNumber || 0;
-    if (pageA !== pageB) {
-      return pageA - pageB;
-    }
-    // If same page, sort by category
-    return a.category.localeCompare(b.category);
-  });
-
   // Get all unique keys from combined data and filter out userId, sessionId
-  const allKeys = [...new Set(allData.flatMap(row => Object.keys(row)))].filter(key => 
+  const allKeys = [...new Set(rawData.flatMap(row => Object.keys(row)))].filter(key => 
     key !== 'userId' && 
     key !== 'sessionId'
   );
 
-  // Reorder: category first, then pageNumber, then other fields, then referenceDocument at end
-  let orderedKeys = ['category', 'pageNumber'];
+  // Reorder: category first, then other fields, then pageNumber second last, then referenceDocument at end
+  let orderedKeys = ['category'];
   allKeys.forEach(key => {
     if (key !== 'category' && key !== 'pageNumber' && key !== 'referenceDocument') {
       orderedKeys.push(key);
     }
   });
+  orderedKeys.push('pageNumber');
   orderedKeys.push('referenceDocument');
 
   // Calculate grand total
-  const grandTotal = allData.reduce((sum, item) => {
+  const grandTotal = rawData.reduce((sum, item) => {
     const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
     return sum + amount;
   }, 0);
 
   // Get pages that had errors for display
-  const pagesInData = [...new Set(allData.map(item => item.pageNumber))].filter(Boolean);
+  const pagesInData = [...new Set(rawData.map(item => item.pageNumber))].filter(Boolean);
   const relevantErrors = pageErrors ? pageErrors.filter(err => 
     pagesInData.includes(err.pageNumber)
   ) : [];
@@ -85,7 +130,7 @@ function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPag
         <table className="min-w-full bg-white border border-gray-300 rounded-lg overflow-hidden">
           <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
             <tr>
-              {allData.some(row => row.pageNumber) && (
+              {rawData.some(row => row.pageNumber) && (
                 <th className="px-4 py-3 border-b text-left text-sm font-bold text-gray-700 sticky left-0 bg-gray-100 z-10">
                   Page View
                 </th>
@@ -101,7 +146,7 @@ function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPag
             </tr>
           </thead>
           <tbody>
-            {allData.map((row, idx) => (
+            {rawData.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50 transition-colors">
                 {row.pageNumber && (
                   <td className="px-4 py-3 border-b text-sm sticky left-0 bg-white z-10">
@@ -136,10 +181,10 @@ function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPag
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <p className="text-lg font-bold text-blue-800">CONSOLIDATED DATA SUMMARY</p>
-            <p className="text-sm text-blue-700 mt-1">All categories combined (sorted by page number)</p>
+            <p className="text-sm text-blue-700 mt-1">All categories combined (raw data in original order)</p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-gray-900">{allData.length}</p>
+            <p className="text-2xl font-bold text-gray-900">{rawData.length}</p>
             <p className="text-sm text-gray-600">total items</p>
           </div>
           {grandTotal > 0 && (
@@ -155,5 +200,3 @@ function ConsolidatedView({ collectedResult, pageErrors, documentName, onViewPag
 }
 
 export default ConsolidatedView;
-
-//updated

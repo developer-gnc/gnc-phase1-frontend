@@ -3,15 +3,16 @@ function DataTable({ data, type, onViewPageReference, pageErrors, documentName }
       return <p className="text-gray-500 text-center py-8">No {type} data found</p>;
     }
   
-    // Get all unique keys and filter out userId, sessionId, and pageNumber
+    // Get all unique keys and filter out userId, sessionId, pageNumber, and referenceDocument
     const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))];
     const keys = allKeys.filter(key => 
       key !== 'userId' && 
       key !== 'sessionId' && 
-      key !== 'pageNumber'
+      key !== 'pageNumber' &&
+      key !== 'referenceDocument'
     );
     
-    // Add pageNumber and referenceDocument at the END
+    // Add pageNumber second last and referenceDocument at the END
     const orderedKeys = [...keys, 'pageNumber', 'referenceDocument'];
     
     const calculateCategoryTotal = (data) => {

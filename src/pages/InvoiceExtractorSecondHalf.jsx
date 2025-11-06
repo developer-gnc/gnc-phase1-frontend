@@ -30,7 +30,7 @@ function InvoiceExtractorSecondHalf(props) {
   // Helper function to identify date columns - ONLY FOR EXCEL FORMATTING
   const isDateColumn = (fieldName) => {
     const normalizedField = fieldName.toUpperCase().replace(/[^A-Z]/g, '');
-    return normalizedField === 'DATE';
+    return normalizedField === 'DATE' || normalizedField === 'INVOICEDATE';
   };
 
   // Helper function to check if a value is numeric - ONLY FOR EXCEL FORMATTING
@@ -195,49 +195,93 @@ function InvoiceExtractorSecondHalf(props) {
     // Add Totals sheet first
     XLSX.utils.book_append_sheet(wb, totalsWS, 'Summary');
 
-    // NEW: Add Consolidated sheet second
-    const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
-    const allData = [];
-    
-    categories.forEach(category => {
-      const categoryData = collectedResult[category];
-      if (categoryData && categoryData.length > 0) {
-        categoryData.forEach(row => {
-          allData.push({
-            category: category === 'labourTimesheet' ? 'Labour Timesheet' :
-                     category === 'equipmentLog' ? 'Equipment Log' :
-                     category.charAt(0).toUpperCase() + category.slice(1),
-            ...row
-          });
+    // NEW: Add Consolidated sheet second - using RAW JSON data like the ConsolidatedView
+    const processRawDataForExcel = () => {
+      // If we don't have allPagesData, fall back to old logic using collectedResult
+      if (!allPagesData || allPagesData.length === 0) {
+        if (!collectedResult) return [];
+        
+        // Fall back to the original logic
+        const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
+        const allData = [];
+        
+        categories.forEach(category => {
+          const categoryData = collectedResult[category];
+          if (categoryData && categoryData.length > 0) {
+            categoryData.forEach(row => {
+              allData.push({
+                category: category === 'labourTimesheet' ? 'Labour Timesheet' :
+                         category === 'equipmentLog' ? 'Equipment Log' :
+                         category.charAt(0).toUpperCase() + category.slice(1),
+                referenceDocument: file?.name || 'Document.pdf',
+                ...row
+              });
+            });
+          }
+        });
+        
+        return allData.sort((a, b) => {
+          const pageA = a.pageNumber || 0;
+          const pageB = b.pageNumber || 0;
+          return pageA - pageB;
         });
       }
-    });
+      
+      const processedData = [];
+      
+      // Sort pages by page number to ensure correct order
+      const sortedPages = [...allPagesData].sort((a, b) => a.pageNumber - b.pageNumber);
+      
+      sortedPages.forEach(pageData => {
+        if (pageData.rawOutput) {
+          try {
+            // Parse the raw JSON output
+            let rawEntries = [];
+            
+            if (typeof pageData.rawOutput === 'string') {
+              rawEntries = JSON.parse(pageData.rawOutput);
+            } else if (Array.isArray(pageData.rawOutput)) {
+              rawEntries = pageData.rawOutput;
+            }
+            
+            // Process each entry from the raw JSON - NO SORTING, keep original order
+            rawEntries.forEach(entry => {
+              if (entry.data) {
+                const flattenedEntry = {
+                  pageNumber: pageData.pageNumber,
+                  category: entry.category || 'Unknown',
+                  referenceDocument: file?.name || 'Document.pdf',
+                  ...entry.data // Spread all data properties directly
+                };
+                processedData.push(flattenedEntry);
+              }
+            });
+          } catch (error) {
+            console.error(`Error parsing raw output for page ${pageData.pageNumber}:`, error);
+          }
+        }
+      });
+      
+      return processedData;
+    };
+    
+    const allData = processRawDataForExcel();
 
     if (allData.length > 0) {
-      // Sort data by page number first, then by category - same as UI
-      allData.sort((a, b) => {
-        const pageA = a.pageNumber || 0;
-        const pageB = b.pageNumber || 0;
-        if (pageA !== pageB) {
-          return pageA - pageB;
-        }
-        // If same page, sort by category
-        return a.category.localeCompare(b.category);
-      });
-
       // Get all unique keys from combined data
       const allKeys = [...new Set(allData.flatMap(row => Object.keys(row)))].filter(key => 
         key !== 'userId' && 
         key !== 'sessionId'
       );
 
-      // Reorder: category first, then pageNumber, then other fields, then referenceDocument at end
-      let orderedKeys = ['category', 'pageNumber'];
+      // Reorder: category first, then other fields, then pageNumber second last, then referenceDocument at end
+      let orderedKeys = ['category'];
       allKeys.forEach(key => {
         if (key !== 'category' && key !== 'pageNumber' && key !== 'referenceDocument') {
           orderedKeys.push(key);
         }
       });
+      orderedKeys.push('pageNumber');
       orderedKeys.push('referenceDocument');
 
       // Create consolidated sheet
@@ -310,16 +354,33 @@ function InvoiceExtractorSecondHalf(props) {
             // Apply specific formatting based on column type
             if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '"$"#,##0.00'; // Currency format
-            } else if (isDateColumn(key) && isDateValue(cellValue)) {
+            } else if (isDateColumn(key)) {
+              // Force date formatting for date columns regardless of value detection
               consolidatedWS[cellRef].z = 'dd/mm/yyyy'; // Date format
               // Convert string dates to Excel date format if needed
-              if (typeof cellValue === 'string') {
-                const dateObj = new Date(cellValue);
-                if (!isNaN(dateObj)) {
+              if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+                let dateObj;
+                // Handle DD/MM/YYYY format specifically
+                if (cellValue.includes('/') && cellValue.length === 10) {
+                  const parts = cellValue.split('/');
+                  if (parts.length === 3) {
+                    // Assume DD/MM/YYYY format and convert to MM/DD/YYYY for parsing
+                    dateObj = new Date(`${parts[1]}/${parts[0]}/${parts[2]}`);
+                  }
+                } else {
+                  dateObj = new Date(cellValue);
+                }
+                if (dateObj && !isNaN(dateObj)) {
                   consolidatedWS[cellRef].v = dateObj;
                   consolidatedWS[cellRef].t = 'd';
+                } else {
+                  // If date parsing fails, keep as text but with date format
+                  consolidatedWS[cellRef].z = '@'; // Text format
                 }
               }
+            } else if (key === 'SRNO' || key === 'pageNumber') {
+              // Integer format for SRNO and pageNumber - no decimals
+              consolidatedWS[cellRef].z = '#,##0'; // Integer format
             } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '#,##0.00'; // Number format without currency
             }
@@ -356,6 +417,7 @@ function InvoiceExtractorSecondHalf(props) {
     }
 
     // Create enhanced worksheets for each category
+    const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
     
     categories.forEach(category => {
       const data = collectedResult[category];
@@ -366,8 +428,15 @@ function InvoiceExtractorSecondHalf(props) {
           key !== 'sessionId'
         );
         
-        // Add referenceDocument column at the end
-        const orderedKeys = [...allKeys, 'referenceDocument'];
+        // Reorder: other fields first, then pageNumber second last, then referenceDocument at end
+        let orderedKeys = [];
+        allKeys.forEach(key => {
+          if (key !== 'pageNumber' && key !== 'referenceDocument') {
+            orderedKeys.push(key);
+          }
+        });
+        orderedKeys.push('pageNumber');
+        orderedKeys.push('referenceDocument');
         
         // Simplified sheet header
         const sheetData = [
@@ -452,16 +521,33 @@ function InvoiceExtractorSecondHalf(props) {
               // Apply specific formatting based on column type
               if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '"$"#,##0.00'; // Currency format
-              } else if (isDateColumn(key) && isDateValue(cellValue)) {
+              } else if (isDateColumn(key)) {
+                // Force date formatting for date columns regardless of value detection
                 ws[cellRef].z = 'dd/mm/yyyy'; // Date format
                 // Convert string dates to Excel date format if needed
-                if (typeof cellValue === 'string') {
-                  const dateObj = new Date(cellValue);
-                  if (!isNaN(dateObj)) {
+                if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+                  let dateObj;
+                  // Handle DD/MM/YYYY format specifically
+                  if (cellValue.includes('/') && cellValue.length === 10) {
+                    const parts = cellValue.split('/');
+                    if (parts.length === 3) {
+                      // Assume DD/MM/YYYY format and convert to MM/DD/YYYY for parsing
+                      dateObj = new Date(`${parts[1]}/${parts[0]}/${parts[2]}`);
+                    }
+                  } else {
+                    dateObj = new Date(cellValue);
+                  }
+                  if (dateObj && !isNaN(dateObj)) {
                     ws[cellRef].v = dateObj;
                     ws[cellRef].t = 'd';
+                  } else {
+                    // If date parsing fails, keep as text but with date format
+                    ws[cellRef].z = '@'; // Text format
                   }
                 }
+              } else if (key === 'SRNO' || key === 'pageNumber') {
+                // Integer format for SRNO and pageNumber - no decimals
+                ws[cellRef].z = '#,##0'; // Integer format
               } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '#,##0.00'; // Number format without currency
               }
@@ -901,6 +987,7 @@ function InvoiceExtractorSecondHalf(props) {
               ) : activeTab === 'consolidated' && viewMode === 'collected' ? (
                 <ConsolidatedView 
                   collectedResult={collectedResult}
+                  allPagesData={allPagesData}
                   pageErrors={allPagesData.filter(p => p.error).map(p => ({ pageNumber: p.pageNumber, error: p.error }))}
                   documentName={file?.name}
                   onViewPageReference={handleViewPageReference}
