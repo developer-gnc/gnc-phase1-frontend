@@ -384,31 +384,6 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
                     Page {currentImage.pageNumber} - {isCurrentPageIncluded ? 'WILL PROCESS' : 'WILL SKIP'}
                   </div>
                 </div>
-
-                {/* Navigation Arrows */}
-                <div className="absolute inset-y-0 left-0 flex items-center">
-                  <button
-                    onClick={() => navigateImage('prev')}
-                    disabled={currentImageIndex === 0}
-                    className="ml-4 bg-black bg-opacity-50 hover:bg-opacity-70 text-white p-3 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="absolute inset-y-0 right-0 flex items-center">
-                  <button
-                    onClick={() => navigateImage('next')}
-                    disabled={currentImageIndex === availableImages.length - 1}
-                    className="mr-4 bg-black bg-opacity-50 hover:bg-opacity-70 text-white p-3 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
               </div>
             ) : (
               <div className="aspect-[3/4] flex items-center justify-center bg-red-900 bg-opacity-30 p-8">
@@ -424,37 +399,66 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
             )}
           </div>
 
-          {/* Enhanced Page Navigation Dots with Status */}
-          <div className="flex justify-center space-x-2 max-h-20 overflow-y-auto">
-            <div className="flex space-x-1 py-2">
-              {availableImages.map((image, index) => {
-                const isIncluded = finalPageList.includes(image.pageNumber);
-                const hasError = image.conversionError;
-                return (
-                  <motion.button
-                    key={image.pageNumber}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                    onClick={() => setCurrentImageIndex(index)}
-                    className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${
-                      index === currentImageIndex
-                        ? 'bg-blue-600 text-white scale-110'
-                        : hasError
-                        ? 'bg-red-800 text-red-200 hover:scale-105'
-                        : isIncluded
-                        ? 'bg-green-600 text-white hover:scale-105'
-                        : 'bg-red-600 text-white hover:scale-105'
-                    }`}
-                    title={`Page ${image.pageNumber} - ${
-                      hasError ? 'Conversion Failed' : 
-                      isIncluded ? 'Will Process' : 'Will Skip'
-                    }`}
-                  >
-                    {hasError ? '✗' : image.pageNumber}
-                  </motion.button>
-                );
-              })}
+          {/* Enhanced Page Navigation Dots with Status - BELOW IMAGE */}
+          <div className="mt-4 px-2 sm:px-12">
+            <div className="flex justify-center items-center gap-2 sm:gap-3">
+              {/* Left Arrow Button */}
+              <button
+                onClick={() => navigateImage('prev')}
+                disabled={currentImageIndex === 0}
+                className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                title="Previous page (←)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Scrollable Dots Container */}
+              <div className="flex-1 overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 #18181b' }}>
+                <div className="flex space-x-1 py-2 justify-center min-w-min px-2">
+                  {availableImages.map((image, index) => {
+                    const isIncluded = finalPageList.includes(image.pageNumber);
+                    const hasError = image.conversionError;
+                    return (
+                      <motion.button
+                        key={image.pageNumber}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-bold transition-all ${
+                          index === currentImageIndex
+                            ? 'bg-blue-600 text-white scale-110 ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-900'
+                            : hasError
+                            ? 'bg-red-800 text-red-200 hover:scale-105'
+                            : isIncluded
+                            ? 'bg-green-600 text-white hover:scale-105'
+                            : 'bg-red-600 text-white hover:scale-105'
+                        }`}
+                        title={`Page ${image.pageNumber} - ${
+                          hasError ? 'Conversion Failed' : 
+                          isIncluded ? 'Will Process' : 'Will Skip'
+                        }`}
+                      >
+                        {hasError ? '✗' : image.pageNumber}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Arrow Button */}
+              <button
+                onClick={() => navigateImage('next')}
+                disabled={currentImageIndex === availableImages.length - 1}
+                className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                title="Next page (→)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
