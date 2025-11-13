@@ -23,7 +23,7 @@ function InvoiceExtractorSecondHalf(props) {
   // Helper function to identify currency columns - ONLY FOR EXCEL FORMATTING
   const isCurrencyColumn = (fieldName) => {
     const normalizedField = fieldName.toUpperCase().replace(/[^A-Z]/g, '');
-    const currencyColumns = ['UNITRATE', 'TAX', 'OP', 'RCV', 'DEPREC', 'ACV', 'TOTALAMOUNT'];
+    const currencyColumns = ['UNITRATE', 'TAX', 'OP', 'RCV', 'DEPREC', 'ACV', 'TOTALAMOUNT', 'REMOVE', 'REPLACE', 'SUBTOTAL', 'O&P'];
     return currencyColumns.includes(normalizedField);
   };
 
@@ -31,6 +31,13 @@ function InvoiceExtractorSecondHalf(props) {
   const isDateColumn = (fieldName) => {
     const normalizedField = fieldName.toUpperCase().replace(/[^A-Z]/g, '');
     return normalizedField === 'DATE' || normalizedField === 'INVOICEDATE';
+  };
+
+  // Helper function to identify time columns - ONLY FOR EXCEL FORMATTING
+  const isTimeColumn = (fieldName) => {
+    const normalizedField = fieldName.toUpperCase();
+    // Check if the field name contains 'TIME' anywhere
+    return normalizedField.includes('TIME');
   };
 
   // Helper function to check if a value is numeric - ONLY FOR EXCEL FORMATTING
@@ -48,6 +55,81 @@ function InvoiceExtractorSecondHalf(props) {
     const dateStr = String(value);
     const parsedDate = new Date(dateStr);
     return !isNaN(parsedDate) && dateStr.length > 0;
+  };
+
+  // Helper function to check if a value is a time and convert to Excel time format
+  const parseTimeValue = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    
+    const timeStr = String(value).trim();
+    
+    // Match various time formats: HH:MM, HH:MM:SS, H:MM AM/PM, etc.
+    const time24Regex = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+    const time12Regex = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i;
+    
+    let hours = 0, minutes = 0, seconds = 0;
+    
+    // Try 24-hour format first
+    let match = timeStr.match(time24Regex);
+    if (match) {
+      hours = parseInt(match[1]);
+      minutes = parseInt(match[2]);
+      seconds = match[3] ? parseInt(match[3]) : 0;
+    } else {
+      // Try 12-hour format
+      match = timeStr.match(time12Regex);
+      if (match) {
+        hours = parseInt(match[1]);
+        minutes = parseInt(match[2]);
+        seconds = match[3] ? parseInt(match[3]) : 0;
+        const meridiem = match[4].toUpperCase();
+        
+        // Convert to 24-hour format
+        if (meridiem === 'PM' && hours !== 12) {
+          hours += 12;
+        } else if (meridiem === 'AM' && hours === 12) {
+          hours = 0;
+        }
+      }
+    }
+    
+    // Validate time
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
+      return null;
+    }
+    
+    // Convert to Excel time format (fraction of a day)
+    // Excel time: 0.5 = 12:00:00, 1.0 = 24:00:00
+    return (hours + (minutes / 60) + (seconds / 3600)) / 24;
+  };
+
+  // Helper function to check if a value should be considered empty/blank
+  const isEmptyValue = (value) => {
+    return value === null || value === undefined || value === '';
+  };
+
+  // Helper function to convert field names to Title Case
+  const toTitleCase = (str) => {
+    // Check if the string is all uppercase
+    const isAllCaps = str === str.toUpperCase() && /[A-Z]/.test(str);
+    
+    if (isAllCaps) {
+      // For ALL CAPS strings, just convert to title case as a single word
+      // Then let the user see it and understand it
+      return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    } else {
+      // For camelCase or mixed case, add spaces before capitals
+      let formatted = str.replace(/([A-Z])/g, ' $1').trim();
+      
+      // Split by spaces and convert each word to title case
+      return formatted
+        .split(/\s+/)
+        .map(word => {
+          const lower = word.toLowerCase();
+          return lower.charAt(0).toUpperCase() + lower.slice(1);
+        })
+        .join(' ');
+    }
   };
 
   // Calculate grand totals like the old system
@@ -284,7 +366,7 @@ function InvoiceExtractorSecondHalf(props) {
       orderedKeys.push('pageNumber');
       orderedKeys.push('referenceDocument');
 
-      // Create consolidated sheet
+      // Create consolidated sheet with Serial Number as first column
       const consolidatedData = [
         ['GNC Invoice - Consolidated Data'],
         [''],
@@ -292,23 +374,30 @@ function InvoiceExtractorSecondHalf(props) {
         [`Processed by: ${user.email}`],
         [`Total Items: ${allData.length}`],
         [''],
-        orderedKeys.map(key => {
-          if (key === 'category') return 'Category';
+        ['Serial Number', ...orderedKeys.map(key => {
+          // Only handle the truly special compound cases
           if (key === 'pageNumber') return 'Page Number';
           if (key === 'referenceDocument') return 'Reference Document';
-          return key.replace(/([A-Z])/g, ' $1').trim();
-        })
+          
+          // Apply title case to everything else
+          return toTitleCase(key);
+        })]
       ];
 
-      // Add all data rows
-      allData.forEach(row => {
-        consolidatedData.push(orderedKeys.map(key => {
-          if (key === 'referenceDocument') return file?.name || 'Document.pdf';
-          if ((key === 'TOTALAMOUNT' || key === 'totalAmount') && row[key] !== null && row[key] !== undefined) {
-            return parseFloat(row[key]) || 0; // Keep as number for currency formatting
-          }
-          return row[key] !== null && row[key] !== undefined ? row[key] : '';
-        }));
+      // Add all data rows with serial numbers - FIXED: Don't add empty strings for null/undefined values
+      allData.forEach((row, index) => {
+        consolidatedData.push([
+          index + 1, // Serial Number starting from 1
+          ...orderedKeys.map(key => {
+            if (key === 'referenceDocument') return file?.name || 'Document.pdf';
+            if ((key === 'TOTALAMOUNT' || key === 'totalAmount') && row[key] !== null && row[key] !== undefined) {
+              return parseFloat(row[key]) || 0; // Keep as number for currency formatting
+            }
+            // FIXED: Return undefined for truly empty values instead of empty string
+            const value = row[key];
+            return isEmptyValue(value) ? undefined : value;
+          })
+        ]);
       });
 
       // Calculate and add total row
@@ -318,42 +407,73 @@ function InvoiceExtractorSecondHalf(props) {
       }, 0);
 
       // Add empty separator row
-      consolidatedData.push(['']);
+      consolidatedData.push([]);
       
-      // Add total row
-      const totalRow = orderedKeys.map((key, index) => {
-        if (index === 0) return 'GRAND TOTAL'; // First column shows "GRAND TOTAL"
-        if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
-          return grandTotal; // Keep as number for currency formatting
-        }
-        if (index === 1) return `${allData.length} items`; // Second column shows item count
-        return ''; // All other columns empty
-      });
+      // Add total row with Serial Number column
+      const totalRow = [
+        '', // Empty for Serial Number column
+        ...orderedKeys.map((key, index) => {
+          if (index === 0) return 'GRAND TOTAL'; // First column shows "GRAND TOTAL"
+          if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+            return grandTotal; // Keep as number for currency formatting
+          }
+          if (index === 1) return `${allData.length} items`; // Second column shows item count
+          return undefined; // All other columns blank (not empty string)
+        })
+      ];
       consolidatedData.push(totalRow);
 
       const consolidatedWS = XLSX.utils.aoa_to_sheet(consolidatedData);
 
       // Apply styling
       if (!consolidatedWS['!merges']) consolidatedWS['!merges'] = [];
-      consolidatedWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length - 1) } });
+      consolidatedWS['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length) } }); // +1 for Serial Number
 
       if (consolidatedWS['A1']) consolidatedWS['A1'].s = titleStyle;
 
-      // Header row styles
+      // Header row styles - including Serial Number column
+      const cellRefSN = XLSX.utils.encode_cell({ r: 6, c: 0 });
+      if (consolidatedWS[cellRefSN]) consolidatedWS[cellRefSN].s = headerStyle;
+      
       orderedKeys.forEach((_, idx) => {
-        const cellRef = XLSX.utils.encode_cell({ r: 6, c: idx });
+        const cellRef = XLSX.utils.encode_cell({ r: 6, c: idx + 1 }); // +1 for Serial Number column
         if (consolidatedWS[cellRef]) consolidatedWS[cellRef].s = headerStyle;
       });
 
       // Data row styles (excluding the total row)
       for (let rowIdx = 7; rowIdx < consolidatedData.length - 2; rowIdx++) {
+        // Style Serial Number column
+        const snCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: 0 });
+        if (consolidatedWS[snCellRef]) {
+          consolidatedWS[snCellRef].z = '#,##0'; // Integer format for serial numbers
+          consolidatedWS[snCellRef].s = dataStyle;
+        }
+        
+        // Style data columns
         orderedKeys.forEach((key, keyIndex) => {
-          const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: keyIndex });
+          const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: keyIndex + 1 }); // +1 for Serial Number column
           if (consolidatedWS[cellRef]) {
-            const cellValue = consolidatedData[rowIdx][keyIndex];
+            const cellValue = consolidatedData[rowIdx][keyIndex + 1]; // +1 for Serial Number column
+            
+            // Skip styling for truly empty cells
+            if (isEmptyValue(cellValue)) {
+              return;
+            }
+            
             // Apply specific formatting based on column type
             if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '"$"#,##0.00'; // Currency format
+            } else if (isTimeColumn(key)) {
+              // Check if the value is a valid time
+              const timeValue = parseTimeValue(cellValue);
+              if (timeValue !== null) {
+                consolidatedWS[cellRef].v = timeValue;
+                consolidatedWS[cellRef].t = 'n'; // Number type for time
+                consolidatedWS[cellRef].z = 'HH:MM:SS'; // 24-hour time format
+              } else if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+                // Keep as text if not a valid time
+                consolidatedWS[cellRef].z = '@'; // Text format
+              }
             } else if (isDateColumn(key)) {
               // Force date formatting for date columns regardless of value detection
               consolidatedWS[cellRef].z = 'dd/mm/yyyy'; // Date format
@@ -381,7 +501,7 @@ function InvoiceExtractorSecondHalf(props) {
             } else if (key === 'SRNO' || key === 'pageNumber') {
               // Integer format for SRNO and pageNumber - no decimals
               consolidatedWS[cellRef].z = '#,##0'; // Integer format
-            } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
+            } else if (!isCurrencyColumn(key) && !isDateColumn(key) && !isTimeColumn(key) && isNumericValue(cellValue)) {
               consolidatedWS[cellRef].z = '#,##0.00'; // Number format without currency
             }
             consolidatedWS[cellRef].s = dataStyle;
@@ -391,8 +511,15 @@ function InvoiceExtractorSecondHalf(props) {
 
       // Apply total row styles
       const totalRowIndex = consolidatedData.length - 1;
+      
+      // Style Serial Number column in total row
+      const snTotalCellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: 0 });
+      if (consolidatedWS[snTotalCellRef]) {
+        consolidatedWS[snTotalCellRef].s = totalStyle;
+      }
+      
       orderedKeys.forEach((key, colIdx) => {
-        const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: colIdx });
+        const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: colIdx + 1 }); // +1 for Serial Number column
         if (consolidatedWS[cellRef]) {
           // Check if this is a currency column in total row
           if (isCurrencyColumn(key)) {
@@ -402,16 +529,19 @@ function InvoiceExtractorSecondHalf(props) {
         }
       });
 
-      // Column widths
-      consolidatedWS['!cols'] = orderedKeys.map(key => {
-        if (key === 'category') return { wch: 18 };
-        if (key === 'pageNumber') return { wch: 12 };
-        if (key === 'referenceDocument') return { wch: 30 };
-        if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
-        if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
-        if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
-        return { wch: 20 };
-      });
+      // Column widths - including Serial Number column
+      consolidatedWS['!cols'] = [
+        { wch: 15 }, // Serial Number column
+        ...orderedKeys.map(key => {
+          if (key === 'category') return { wch: 18 };
+          if (key === 'pageNumber') return { wch: 12 };
+          if (key === 'referenceDocument') return { wch: 30 };
+          if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
+          if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
+          if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
+          return { wch: 20 };
+        })
+      ];
 
       XLSX.utils.book_append_sheet(wb, consolidatedWS, 'Consolidated');
     }
@@ -438,7 +568,7 @@ function InvoiceExtractorSecondHalf(props) {
         orderedKeys.push('pageNumber');
         orderedKeys.push('referenceDocument');
         
-        // Simplified sheet header
+        // Simplified sheet header with Serial Number as first column
         const sheetData = [
           ['GNC Invoice'],
           [''],
@@ -447,23 +577,31 @@ function InvoiceExtractorSecondHalf(props) {
           [`Category: ${category.charAt(0).toUpperCase() + category.slice(1)}`],
           [`Items Count: ${data.length}`],
           [''],
-          // Headers with proper formatting
-          orderedKeys.map(key => {
+          // Headers with proper formatting - Serial Number first
+          ['Serial Number', ...orderedKeys.map(key => {
+            // Only handle the truly special compound cases
             if (key === 'pageNumber') return 'Page Number';
             if (key === 'referenceDocument') return 'Reference Document';
-            return key.replace(/([A-Z])/g, ' $1').trim();
-          })
+            
+            // Apply title case to everything else
+            return toTitleCase(key);
+          })]
         ];
         
-        // Add data rows
-        data.forEach(row => {
-          sheetData.push(orderedKeys.map(key => {
-            if (key === 'referenceDocument') return file?.name || 'Document.pdf';
-            if ((key === 'TOTALAMOUNT' || key === 'totalAmount') && row[key] !== null && row[key] !== undefined) {
-              return parseFloat(row[key]) || 0; // Keep as number for currency formatting
-            }
-            return row[key] !== null && row[key] !== undefined ? row[key] : '';
-          }));
+        // Add data rows with serial numbers - FIXED: Don't add empty strings for null/undefined values
+        data.forEach((row, index) => {
+          sheetData.push([
+            index + 1, // Serial Number starting from 1
+            ...orderedKeys.map(key => {
+              if (key === 'referenceDocument') return file?.name || 'Document.pdf';
+              if ((key === 'TOTALAMOUNT' || key === 'totalAmount') && row[key] !== null && row[key] !== undefined) {
+                return parseFloat(row[key]) || 0; // Keep as number for currency formatting
+              }
+              // FIXED: Return undefined for truly empty values instead of empty string
+              const value = row[key];
+              return isEmptyValue(value) ? undefined : value;
+            })
+          ]);
         });
 
         // Enhanced total section
@@ -473,27 +611,33 @@ function InvoiceExtractorSecondHalf(props) {
         }, 0);
 
         if (categoryTotal > 0) {
-          sheetData.push(['']); // Separator
-          sheetData.push(['']); // Extra space
+          sheetData.push([]); // Separator
+          sheetData.push([]); // Extra space
           
-          // Category total summary section
-          const totalHeaderRow = orderedKeys.map((key, index) => {
-            if (index === 0) return `${category.toUpperCase()} CATEGORY TOTAL`;
-            else if (index === 1) return 'SUMMARY';
-            return '';
-          });
+          // Category total summary section with Serial Number column
+          const totalHeaderRow = [
+            '', // Empty for Serial Number column
+            ...orderedKeys.map((key, index) => {
+              if (index === 0) return `${category.toUpperCase()} CATEGORY TOTAL`;
+              else if (index === 1) return 'SUMMARY';
+              return undefined;
+            })
+          ];
           sheetData.push(totalHeaderRow);
           
-          const totalDataRow = orderedKeys.map((key, index) => {
-            if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
-              return categoryTotal; // Keep as number for currency formatting
-            } else if (index === 1) {
-              return `${data.length} items`;
-            } else if (index === 2) {
-              return `Total: $${categoryTotal.toFixed(2)}`;
-            }
-            return '';
-          });
+          const totalDataRow = [
+            '', // Empty for Serial Number column
+            ...orderedKeys.map((key, index) => {
+              if (key === 'TOTALAMOUNT' || key === 'totalAmount') {
+                return categoryTotal; // Keep as number for currency formatting
+              } else if (index === 1) {
+                return `${data.length} items`;
+              } else if (index === 2) {
+                return `Total: $${categoryTotal.toFixed(2)}`;
+              }
+              return undefined;
+            })
+          ];
           sheetData.push(totalDataRow);
         }
         
@@ -501,26 +645,54 @@ function InvoiceExtractorSecondHalf(props) {
         
         // Enhanced merging
         if (!ws['!merges']) ws['!merges'] = [];
-        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length - 1) } });
+        ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(2, orderedKeys.length) } }); // +1 for Serial Number
         
         // Apply enhanced styles
         if (ws['A1']) ws['A1'].s = titleStyle;
         
-        // Header row styles
+        // Header row styles - including Serial Number column
+        const cellRefSN = XLSX.utils.encode_cell({ r: 7, c: 0 });
+        if (ws[cellRefSN]) ws[cellRefSN].s = headerStyle;
+        
         orderedKeys.forEach((_, idx) => {
-          const cellRef = XLSX.utils.encode_cell({ r: 7, c: idx });
+          const cellRef = XLSX.utils.encode_cell({ r: 7, c: idx + 1 }); // +1 for Serial Number column
           if (ws[cellRef]) ws[cellRef].s = headerStyle;
         });
         
         // Data row styles
         for (let rowIdx = 8; rowIdx < sheetData.length - (categoryTotal > 0 ? 4 : 0); rowIdx++) {
+          // Style Serial Number column
+          const snCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: 0 });
+          if (ws[snCellRef]) {
+            ws[snCellRef].z = '#,##0'; // Integer format for serial numbers
+            ws[snCellRef].s = dataStyle;
+          }
+          
+          // Style data columns
           orderedKeys.forEach((key, colIdx) => {
-            const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+            const cellRef = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx + 1 }); // +1 for Serial Number column
             if (ws[cellRef]) {
-              const cellValue = sheetData[rowIdx][colIdx];
+              const cellValue = sheetData[rowIdx][colIdx + 1]; // +1 for Serial Number column
+              
+              // Skip styling for truly empty cells
+              if (isEmptyValue(cellValue)) {
+                return;
+              }
+              
               // Apply specific formatting based on column type
               if (isCurrencyColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '"$"#,##0.00'; // Currency format
+              } else if (isTimeColumn(key)) {
+                // Check if the value is a valid time
+                const timeValue = parseTimeValue(cellValue);
+                if (timeValue !== null) {
+                  ws[cellRef].v = timeValue;
+                  ws[cellRef].t = 'n'; // Number type for time
+                  ws[cellRef].z = 'HH:MM:SS'; // 24-hour time format
+                } else if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+                  // Keep as text if not a valid time
+                  ws[cellRef].z = '@'; // Text format
+                }
               } else if (isDateColumn(key)) {
                 // Force date formatting for date columns regardless of value detection
                 ws[cellRef].z = 'dd/mm/yyyy'; // Date format
@@ -548,7 +720,7 @@ function InvoiceExtractorSecondHalf(props) {
               } else if (key === 'SRNO' || key === 'pageNumber') {
                 // Integer format for SRNO and pageNumber - no decimals
                 ws[cellRef].z = '#,##0'; // Integer format
-              } else if (!isCurrencyColumn(key) && !isDateColumn(key) && isNumericValue(cellValue)) {
+              } else if (!isCurrencyColumn(key) && !isDateColumn(key) && !isTimeColumn(key) && isNumericValue(cellValue)) {
                 ws[cellRef].z = '#,##0.00'; // Number format without currency
               }
               ws[cellRef].s = dataStyle;
@@ -559,9 +731,16 @@ function InvoiceExtractorSecondHalf(props) {
         // Total section styles
         if (categoryTotal > 0) {
           const totalRowStart = sheetData.length - 2;
+          
+          // Style Serial Number column in total rows
+          const snTotalCellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: 0 });
+          const snTotalCellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: 0 });
+          if (ws[snTotalCellRef1]) ws[snTotalCellRef1].s = totalStyle;
+          if (ws[snTotalCellRef2]) ws[snTotalCellRef2].s = totalStyle;
+          
           orderedKeys.forEach((key, colIdx) => {
-            const cellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: colIdx });
-            const cellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: colIdx });
+            const cellRef1 = XLSX.utils.encode_cell({ r: totalRowStart - 1, c: colIdx + 1 }); // +1 for Serial Number
+            const cellRef2 = XLSX.utils.encode_cell({ r: totalRowStart, c: colIdx + 1 }); // +1 for Serial Number
             if (ws[cellRef1]) {
               // Apply currency formatting to amount columns in totals
               if (isCurrencyColumn(key)) {
@@ -574,15 +753,18 @@ function InvoiceExtractorSecondHalf(props) {
           });
         }
         
-        // Enhanced column widths
-        ws['!cols'] = orderedKeys.map(key => {
-          if (key === 'pageNumber') return { wch: 12 };
-          if (key === 'referenceDocument') return { wch: 30 };
-          if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
-          if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
-          if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
-          return { wch: 20 };
-        });
+        // Enhanced column widths - including Serial Number column
+        ws['!cols'] = [
+          { wch: 15 }, // Serial Number column
+          ...orderedKeys.map(key => {
+            if (key === 'pageNumber') return { wch: 12 };
+            if (key === 'referenceDocument') return { wch: 30 };
+            if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
+            if (key === 'EMPLOYEENAME' || key === 'employeeName') return { wch: 25 };
+            if (key === 'TOTALAMOUNT' || key === 'totalAmount') return { wch: 15 };
+            return { wch: 20 };
+          })
+        ];
         
         // Create proper sheet name
         const sheetName = category === 'labourTimesheet' ? 'LabourTimesheet' :
