@@ -1,8 +1,26 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 
-function FileUpload({ file, loading, progress, allPagesData, error, processingStatus, onFileChange, onUpload, onCancel }) {
+function FileUpload({ 
+  file, 
+  loading, 
+  progress, 
+  allPagesData, 
+  error, 
+  processingStatus, 
+  onFileChange, 
+  onUpload, 
+  onCancel,
+  processingPhase,
+  conversionProgress,
+  conversionStatus,
+  customPrompts,
+  onCustomPromptsChange,
+  buildFinalPrompt
+}) {
   const [isDragging, setIsDragging] = useState(false);
+  const [showCustomPrompts, setShowCustomPrompts] = useState(false);
+  const [newPrompt, setNewPrompt] = useState('');
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -15,9 +33,35 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
     }
   };
 
-  // Calculate statistics - only count actual errors
+  // Custom prompts management functions
+  const addCustomPrompt = () => {
+    if (newPrompt.trim()) {
+      onCustomPromptsChange([...customPrompts, newPrompt.trim()]);
+      setNewPrompt('');
+    }
+  };
+
+  const removeCustomPrompt = (index) => {
+    const updatedPrompts = customPrompts.filter((_, i) => i !== index);
+    onCustomPromptsChange(updatedPrompts);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      addCustomPrompt();
+    }
+  };
+
+  // Calculate statistics for completed processing
   const pagesWithData = allPagesData.filter(p => !p.error).length;
   const pagesWithErrors = allPagesData.filter(p => p.error).length;
+
+  // Show conversion progress if we're converting
+  const showConversionProgress = processingPhase === 'converting' && conversionProgress.total > 0;
+  
+  // Show analysis progress if we're processing
+  const showAnalysisProgress = processingPhase === 'processing' && progress.total > 0;
 
   return (
     <motion.div
@@ -66,7 +110,26 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
             disabled={!file || loading}
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-semibold disabled:bg-zinc-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Processing...' : 'Extract Data'}
+            {loading && processingPhase === 'converting' ? 'Converting PDF...' : 
+             loading && processingPhase === 'processing' ? 'Processing...' : 
+             'Convert to Images'}
+          </button>
+          
+          <button
+            onClick={() => setShowCustomPrompts(!showCustomPrompts)}
+            disabled={loading}
+            className="bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-lg font-semibold disabled:bg-zinc-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            title="Add custom extraction rules"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Custom Rules
+            {customPrompts.length > 0 && (
+              <span className="bg-teal-800 text-teal-200 px-2 py-1 rounded-full text-xs">
+                {customPrompts.length}
+              </span>
+            )}
           </button>
           
           {loading && (
@@ -106,35 +169,68 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
           </motion.div>
         )}
 
-        {loading && (
+        {/* PDF Conversion Progress */}
+        {showConversionProgress && (
           <div className="text-center py-8">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
             <p className="mt-4 text-gray-300 font-semibold">
-              {processingStatus || `Processing page ${progress.current} of ${progress.total}...`}
+              {processingStatus || `Converting page ${conversionProgress.converted} of ${conversionProgress.total}...`}
             </p>
-            {progress.total > 0 && (
-              <>
-                <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
-                  <div
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                  ></div>
-                </div>
-                <p className="mt-2 text-sm text-gray-400">
-                  {Math.round((progress.current / progress.total) * 100)}% Complete
-                </p>
-              </>
-            )}
+            <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
+              <div
+                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${(conversionProgress.converted / conversionProgress.total) * 100}%` }}
+              ></div>
+            </div>
+            <p className="mt-2 text-sm text-gray-400">
+              {Math.round((conversionProgress.converted / conversionProgress.total) * 100)}% Complete
+            </p>
           </div>
         )}
 
-        {loading && allPagesData.length > 0 && (
+        {/* AI Analysis Progress */}
+        {showAnalysisProgress && (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+            <p className="mt-4 text-gray-300 font-semibold">
+              {processingStatus || `Analyzing page ${progress.current} of ${progress.total}...`}
+            </p>
+            <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
+              <div
+                className="bg-green-600 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${(progress.current / progress.total) * 100}%` }}
+              ></div>
+            </div>
+            <p className="mt-2 text-sm text-gray-400">
+              {Math.round((progress.current / progress.total) * 100)}% Complete
+            </p>
+          </div>
+        )}
+
+        {/* Show conversion complete status */}
+        {processingPhase === 'selection' && conversionStatus.conversionComplete && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-blue-900 bg-opacity-30 border border-blue-800 p-4 rounded-lg"
+          >
+            <p className="text-blue-400 font-semibold mb-2">âœ… PDF Converted Successfully</p>
+            <div className="text-sm text-blue-300 space-y-1">
+              <p>ðŸ“„ Total Pages: {conversionProgress.total}</p>
+              <p>âœ… Converted Successfully: {conversionProgress.converted}</p>
+              <p className="text-gray-300">Select images to process with AI analysis</p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Show processing results */}
+        {loading && processingPhase === 'processing' && allPagesData.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-green-900 bg-opacity-30 border border-green-800 p-4 rounded-lg"
           >
-            <p className="text-green-400 font-semibold mb-2">Processing Progress:</p>
+            <p className="text-green-400 font-semibold mb-2">AI Analysis Progress:</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
               {allPagesData.map(page => (
                 <span 
@@ -142,25 +238,105 @@ function FileUpload({ file, loading, progress, allPagesData, error, processingSt
                   className={`${page.error ? 'bg-red-600' : 'bg-green-600'} text-white px-3 py-1 rounded-full text-sm`}
                   title={page.error || 'Success'}
                 >
-                  Page {page.pageNumber} {page.error ? '❌' : '✅'}
+                  Page {page.pageNumber} {page.error ? 'âŒ' : 'âœ…'}
                 </span>
               ))}
             </div>
           </motion.div>
         )}
         
-        {!loading && allPagesData.length > 0 && (
+        {/* Custom Prompts Section */}
+        {!loading && showCustomPrompts && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-teal-900 bg-opacity-20 border border-teal-800 rounded-lg p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-teal-400 font-semibold">Custom Extraction Rules</h3>
+              <button
+                onClick={() => setShowCustomPrompts(false)}
+                className="text-teal-400 hover:text-teal-300 transition-colors p-1"
+                title="Close custom prompts"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+             
+              
+              {/* Current custom prompts list */}
+              {customPrompts.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {customPrompts.map((prompt, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="bg-teal-800 bg-opacity-30 border border-teal-700 rounded-lg p-3 flex items-start justify-between"
+                    >
+                      <div className="flex-1">
+                        <span className="text-teal-400 font-medium text-sm">Point {27 + index}:</span>
+                        <p className="text-teal-200 text-sm mt-1">{prompt}</p>
+                      </div>
+                      <button
+                        onClick={() => removeCustomPrompt(index)}
+                        className="text-red-400 hover:text-red-300 ml-2 flex-shrink-0 p-1"
+                        title="Remove this rule"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add new prompt */}
+              <div className="flex gap-2">
+                <textarea
+                  value={newPrompt}
+                  onChange={(e) => setNewPrompt(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={`Add new rule...`}
+                  className="flex-1 bg-zinc-800 border border-teal-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm resize-none"
+                  rows={2}
+                />
+                <button
+                  onClick={addCustomPrompt}
+                  disabled={!newPrompt.trim()}
+                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-semibold disabled:bg-zinc-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                >
+                  Add Rule
+                </button>
+              </div>
+
+              {customPrompts.length > 0 && buildFinalPrompt && (
+                <div className="text-xs text-teal-300 border-t border-teal-800 pt-2">
+                  Your custom rules will be appended to the base prompt as points 27-{26 + customPrompts.length}.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Final completion status */}
+        {!loading && processingPhase === 'complete' && allPagesData.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-blue-900 bg-opacity-30 border border-blue-800 p-4 rounded-lg"
           >
-            <p className="text-blue-400 font-semibold mb-2">✅ Processing Complete</p>
+            <p className="text-blue-400 font-semibold mb-2">âœ… Processing Complete</p>
             <div className="text-sm text-blue-300 space-y-1">
-              <p>📄 Total Pages: {allPagesData.length}</p>
-              <p>✓ Successfully Processed: {pagesWithData}</p>
+              <p>ðŸ“„ Total Pages: {allPagesData.length}</p>
+              <p>âœ… Successfully Processed: {pagesWithData}</p>
               {pagesWithErrors > 0 && (
-                <p className="text-red-400">❌ Failed Pages: {pagesWithErrors}</p>
+                <p className="text-red-400">âŒ Failed Pages: {pagesWithErrors}</p>
               )}
             </div>
           </motion.div>

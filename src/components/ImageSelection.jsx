@@ -1,19 +1,24 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUploadNew, conversionStatus }) {
+function ImageSelection({ 
+  availableImages, 
+  onProcessSelected, 
+  onExtractAll, 
+  loading, 
+  onCancel,
+  conversionStatus,
+  extractionPrompt,
+  setExtractionPrompt,
+  selectedModel,
+  setSelectedModel,
+  availableModels
+}) {
   const [selectionMode, setSelectionMode] = useState('all'); // 'all', 'exclude', 'include'
   const [pageInput, setPageInput] = useState('');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [inputError, setInputError] = useState('');
-  const [availableImages, setAvailableImages] = useState(images || []);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash'); // Model selection state
   const [showModelSelector, setShowModelSelector] = useState(false);
-
-  // Update available images when new ones come in (real-time streaming)
-  useEffect(() => {
-    setAvailableImages(images || []);
-  }, [images]);
 
   // Adjust current image index if it becomes invalid
   useEffect(() => {
@@ -21,15 +26,6 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
       setCurrentImageIndex(availableImages.length - 1);
     }
   }, [availableImages.length, currentImageIndex]);
-
-  const getAuthenticatedImageUrl = useCallback((imageUrl) => {
-    if (!imageUrl) return null;
-    const token = localStorage.getItem('authToken');
-    if (!token) return imageUrl;
-    
-    const separator = imageUrl.includes('?') ? '&' : '?';
-    return `${imageUrl}${separator}token=${token}`;
-  }, []);
 
   // Parse page input like "1,4,6-10,15" into array of page numbers
   const parsePageInput = useCallback((input) => {
@@ -65,13 +61,16 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
     return Array.from(pages).sort((a, b) => a - b);
   }, []);
 
-  // Check conversion status
+  // Check conversion status - support real-time conversion tracking
   const conversionStats = useMemo(() => {
     const total = availableImages.length;
     const successful = availableImages.filter(img => !img.conversionError).length;
     const failed = availableImages.filter(img => img.conversionError).length;
-    // Mark as all converted when we have processed all pages (regardless of success/failure)
-    const allConverted = conversionStatus?.conversionComplete || conversionStatus?.allConverted || false;
+    
+    // For client-side conversion, consider it complete when we have images and no conversion status indicating otherwise
+    const allConverted = conversionStatus?.conversionComplete || 
+                        conversionStatus?.allConverted || 
+                        total > 0; // Default to true when we have images available
     
     return { total, successful, failed, allConverted };
   }, [availableImages, conversionStatus]);
@@ -83,17 +82,6 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
       .map(img => img.pageNumber)
       .sort((a, b) => a - b);
   }, [availableImages]);
-
-  // Memoize parsed input pages to prevent infinite loops
-  const parsedInputPages = useMemo(() => {
-    if (!pageInput.trim()) return [];
-    
-    try {
-      return parsePageInput(pageInput);
-    } catch (error) {
-      return [];
-    }
-  }, [pageInput, parsePageInput]);
 
   // Memoize final page list to prevent infinite re-renders
   const finalPageList = useMemo(() => {
@@ -161,11 +149,6 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
   }, []);
 
   const handleProcessSelected = useCallback(() => {
-    if (!conversionStats.allConverted) {
-      setInputError('Please wait for all pages to finish converting before processing');
-      return;
-    }
-
     if (!validationResult.isValid) {
       setInputError(validationResult.error);
       return;
@@ -178,17 +161,12 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
     
     // Show model selector before processing
     setShowModelSelector(true);
-  }, [validationResult, finalPageList, selectionMode, conversionStats.allConverted]);
+  }, [validationResult, finalPageList, selectionMode]);
 
   const handleExtractAll = useCallback(() => {
-    if (!conversionStats.allConverted) {
-      setInputError('Please wait for all pages to finish converting before processing');
-      return;
-    }
-    
     // Show model selector before processing
     setShowModelSelector(true);
-  }, [conversionStats.allConverted]);
+  }, []);
 
   // Handle model selection and proceed with processing
   const proceedWithProcessing = useCallback((isExtractAll) => {
@@ -252,7 +230,7 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
         <div className="flex justify-between items-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-white">Select Pages to Extract</h2>
           <button
-            onClick={onUploadNew}
+            onClick={onCancel}
             disabled={loading}
             className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -260,7 +238,7 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
           </button>
         </div>
 
-        {/* Conversion Status */}
+        {/* Real-time Conversion Status */}
         {!conversionStats.allConverted && (
           <div className="bg-blue-900 bg-opacity-30 border border-blue-800 rounded-lg p-4">
             <div className="flex items-center space-x-3">
@@ -268,7 +246,8 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
               <div>
                 <p className="text-blue-400 font-semibold">Converting PDF to Images...</p>
                 <p className="text-blue-300 text-sm">
-                  {conversionStats.successful} of {conversionStats.total} pages converted
+                  {availableImages.length === 0 ? 'Starting conversion...' : 
+                   `${conversionStats.successful} of ${conversionStats.total || '?'} pages converted`}
                   {conversionStats.failed > 0 && ` (${conversionStats.failed} failed)`}
                 </p>
               </div>
@@ -341,127 +320,143 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
             )}
             {validationResult.isValid && pageInput && finalPageList.length > 0 && (
               <p className="text-green-400 text-sm mt-2">
-                ✅ {finalPageList.length} pages {selectionMode === 'include' ? 'will be processed' : 'will be processed'}
+                ✅ {finalPageList.length} pages will be processed
               </p>
             )}
           </div>
         )}
 
-        {/* Image Preview */}
-        <div className="border-t border-zinc-700 pt-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Preview & Navigate ({currentImageIndex + 1} of {availableImages.length})
-          </h3>
-          
-          <div className="relative bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800">
-            {currentImage && !currentImage.conversionError ? (
-              <div className="relative">
-                <img 
-                  src={getAuthenticatedImageUrl(currentImage.imageUrl)}
-                  alt={`Page ${currentImage.pageNumber}`}
-                  className="w-full h-auto min-h-[600px] max-h-[800px] object-contain cursor-zoom-in"
-                  onClick={(e) => {
-                    // Optional: Add zoom functionality on click
-                    const img = e.target;
-                    if (img.style.transform === 'scale(1.5)') {
-                      img.style.transform = 'scale(1)';
-                      img.style.cursor = 'zoom-in';
-                    } else {
-                      img.style.transform = 'scale(1.5)';
-                      img.style.cursor = 'zoom-out';
-                      img.style.transformOrigin = 'center';
-                    }
-                  }}
-                />
-                
-                {/* Page Status Indicator */}
-                <div className="absolute top-4 left-4">
-                  <div className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                    isCurrentPageIncluded
-                      ? 'bg-green-600 text-white'
-                      : 'bg-red-600 text-white'
-                  }`}>
-                    Page {currentImage.pageNumber} - {isCurrentPageIncluded ? 'WILL PROCESS' : 'WILL SKIP'}
+        {/* Image Preview - Show available images during conversion */}
+        {availableImages.length > 0 && (
+          <div className="border-t border-zinc-700 pt-6">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Preview & Navigate ({currentImageIndex + 1} of {availableImages.length})
+              {!conversionStats.allConverted && (
+                <span className="text-blue-400 text-sm ml-2">(Converting...)</span>
+              )}
+            </h3>
+            
+            <div className="relative bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800">
+              {currentImage && !currentImage.conversionError ? (
+                <div className="relative">
+                  <img 
+                    src={currentImage.base64}
+                    alt={`Page ${currentImage.pageNumber}`}
+                    className="w-full h-auto min-h-[600px] max-h-[800px] object-contain cursor-zoom-in"
+                    onClick={(e) => {
+                      // Optional: Add zoom functionality on click
+                      const img = e.target;
+                      if (img.style.transform === 'scale(1.5)') {
+                        img.style.transform = 'scale(1)';
+                        img.style.cursor = 'zoom-in';
+                      } else {
+                        img.style.transform = 'scale(1.5)';
+                        img.style.cursor = 'zoom-out';
+                        img.style.transformOrigin = 'center';
+                      }
+                    }}
+                  />
+                  
+                  {/* Page Status Indicator */}
+                  <div className="absolute top-4 left-4">
+                    <div className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                      isCurrentPageIncluded
+                        ? 'bg-green-600 text-white'
+                        : 'bg-red-600 text-white'
+                    }`}>
+                      Page {currentImage.pageNumber} - {isCurrentPageIncluded ? 'WILL PROCESS' : 'WILL SKIP'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="aspect-[3/4] flex items-center justify-center bg-red-900 bg-opacity-30 p-8">
-                <div className="text-center">
-                  <svg className="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              ) : (
+                <div className="aspect-[3/4] flex items-center justify-center bg-red-900 bg-opacity-30 p-8">
+                  <div className="text-center">
+                    <svg className="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <p className="text-red-400 font-medium">Error Loading Page {currentImage?.pageNumber}</p>
+                    <p className="text-red-300 text-sm mt-2">{currentImage?.conversionError}</p>
+                    <p className="text-red-200 text-xs mt-2">This page will be automatically excluded from processing</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Enhanced Page Navigation Dots with Status - BELOW IMAGE */}
+            <div className="mt-4 px-2 sm:px-12">
+              <div className="flex justify-center items-center gap-2 sm:gap-3">
+                {/* Left Arrow Button */}
+                <button
+                  onClick={() => navigateImage('prev')}
+                  disabled={currentImageIndex === 0}
+                  className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  title="Previous page (←)"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  <p className="text-red-400 font-medium">Error Loading Page {currentImage?.pageNumber}</p>
-                  <p className="text-red-300 text-sm mt-2">{currentImage?.conversionError}</p>
-                  <p className="text-red-200 text-xs mt-2">This page will be automatically excluded from processing</p>
+                </button>
+
+                {/* Scrollable Dots Container */}
+                <div className="flex-1 overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 #18181b' }}>
+                  <div className="flex space-x-1 py-2 justify-center min-w-min px-2">
+                    {availableImages.map((image, index) => {
+                      const isIncluded = finalPageList.includes(image.pageNumber);
+                      const hasError = image.conversionError;
+                      return (
+                        <motion.button
+                          key={image.pageNumber}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: index * 0.05 }}
+                          onClick={() => setCurrentImageIndex(index)}
+                          className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-bold transition-all ${
+                            index === currentImageIndex
+                              ? 'bg-blue-600 text-white scale-110 ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-900'
+                              : hasError
+                              ? 'bg-red-800 text-red-200 hover:scale-105'
+                              : isIncluded
+                              ? 'bg-green-600 text-white hover:scale-105'
+                              : 'bg-red-600 text-white hover:scale-105'
+                          }`}
+                          title={`Page ${image.pageNumber} - ${
+                            hasError ? 'Conversion Failed' : 
+                            isIncluded ? 'Will Process' : 'Will Skip'
+                          }`}
+                        >
+                          {hasError ? '✗' : image.pageNumber}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Right Arrow Button */}
+                <button
+                  onClick={() => navigateImage('next')}
+                  disabled={currentImageIndex === availableImages.length - 1}
+                  className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
+                  title="Next page (→)"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* Enhanced Page Navigation Dots with Status - BELOW IMAGE */}
-          <div className="mt-4 px-2 sm:px-12">
-            <div className="flex justify-center items-center gap-2 sm:gap-3">
-              {/* Left Arrow Button */}
-              <button
-                onClick={() => navigateImage('prev')}
-                disabled={currentImageIndex === 0}
-                className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
-                title="Previous page (←)"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-
-              {/* Scrollable Dots Container */}
-              <div className="flex-1 overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 #18181b' }}>
-                <div className="flex space-x-1 py-2 justify-center min-w-min px-2">
-                  {availableImages.map((image, index) => {
-                    const isIncluded = finalPageList.includes(image.pageNumber);
-                    const hasError = image.conversionError;
-                    return (
-                      <motion.button
-                        key={image.pageNumber}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                        onClick={() => setCurrentImageIndex(index)}
-                        className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-bold transition-all ${
-                          index === currentImageIndex
-                            ? 'bg-blue-600 text-white scale-110 ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-900'
-                            : hasError
-                            ? 'bg-red-800 text-red-200 hover:scale-105'
-                            : isIncluded
-                            ? 'bg-green-600 text-white hover:scale-105'
-                            : 'bg-red-600 text-white hover:scale-105'
-                        }`}
-                        title={`Page ${image.pageNumber} - ${
-                          hasError ? 'Conversion Failed' : 
-                          isIncluded ? 'Will Process' : 'Will Skip'
-                        }`}
-                      >
-                        {hasError ? '✗' : image.pageNumber}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Right Arrow Button */}
-              <button
-                onClick={() => navigateImage('next')}
-                disabled={currentImageIndex === availableImages.length - 1}
-                className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-zinc-700"
-                title="Next page (→)"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Loading state when no images available yet */}
+        {availableImages.length === 0 && !conversionStats.allConverted && (
+          <div className="border-t border-zinc-700 pt-6">
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+              <h3 className="text-lg font-semibold text-white mb-2">Converting PDF Pages...</h3>
+              <p className="text-gray-400">Your images will appear here as they're processed</p>
+            </div>
+          </div>
+        )}
 
         {/* ==================== SEPARATOR ==================== */}
         <div className="border-t border-zinc-700 my-2"></div>
@@ -474,10 +469,10 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-gray-400">Total Pages:</span>
-                <span className="text-white ml-2 font-semibold">{availableImages.length}</span>
+                <span className="text-white ml-2 font-semibold">{availableImages.length}{!conversionStats.allConverted && '+'}</span>
               </div>
               <div>
-                <span className="text-gray-400">Converted:</span>
+                <span className="text-gray-400">Available:</span>
                 <span className="text-green-400 ml-2 font-semibold">{conversionStats.successful}</span>
               </div>
               <div>
@@ -492,7 +487,7 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
             
             {conversionStats.failed > 0 && (
               <div className="mt-3 text-xs text-red-300">
-                <span className="font-semibold">{conversionStats.failed} pages failed conversion</span> and will be automatically excluded
+                <span className="font-semibold">{conversionStats.failed} pages had errors</span> and will be automatically excluded
               </div>
             )}
             
@@ -513,16 +508,17 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
                 ⚠️ No pages selected for processing
               </div>
             )}
-            
-            {!conversionStats.allConverted && (
+
+            {/* Real-time conversion status in summary */}
+            {!conversionStats.allConverted && availableImages.length > 0 && (
               <div className="mt-3 text-blue-400 text-sm">
-                ⏳ Conversion in progress... Extract buttons will be enabled when complete
+                ⏳ Conversion in progress... More pages will appear as they're processed
               </div>
             )}
             
-            {conversionStats.allConverted && (
+            {conversionStats.allConverted && conversionStats.successful > 0 && (
               <div className="mt-3 text-green-400 text-sm">
-                ✅ All pages processed! Extract buttons are now enabled
+                ✅ All {conversionStats.total} pages processed! Ready for extraction
               </div>
             )}
           </div>
@@ -531,14 +527,14 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
           <div className="flex gap-3 flex-wrap justify-end">
             <button
               onClick={handleExtractAll}
-              disabled={loading || !conversionStats.allConverted || conversionStats.successful === 0}
+              disabled={loading || conversionStats.successful === 0}
               className="bg-green-600 hover:bg-green-700 disabled:bg-zinc-700 disabled:text-gray-500 text-white py-3 px-6 rounded-lg font-semibold transition-colors disabled:cursor-not-allowed"
             >
               {loading ? 'Processing...' : `Quick: Extract All Converted (${conversionStats.successful})`}
             </button>
             <button
               onClick={handleProcessSelected}
-              disabled={finalPageList.length === 0 || loading || !validationResult.isValid || !conversionStats.allConverted}
+              disabled={finalPageList.length === 0 || loading || !validationResult.isValid}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-gray-500 text-white py-3 px-6 rounded-lg font-semibold transition-colors disabled:cursor-not-allowed"
             >
               {loading ? 'Processing...' : `Extract Selected (${finalPageList.length})`}
@@ -620,7 +616,7 @@ function ImageSelection({ images, onProcessSelected, onSelectAll, loading, onUpl
                   Cancel
                 </button>
                 <button
-                  onClick={() => proceedWithProcessing(selectionMode === 'all')}
+                  onClick={() => proceedWithProcessing(selectionMode === 'all' || (selectionMode === 'exclude' && !pageInput.trim()) || (selectionMode === 'include' && !pageInput.trim()))}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors"
                 >
                   Start Extraction

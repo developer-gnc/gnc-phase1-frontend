@@ -15,6 +15,8 @@ function InvoiceExtractorSecondHalf(props) {
     showImage, setShowImage, selectedRowImage, setSelectedRowImage, processingStatus,
     showCancelConfirm, setShowCancelConfirm, sessionId, showImageSelection,
     availableImages, processingPhase, conversionProgress, conversionStatus,
+    extractionPrompt, setExtractionPrompt, selectedModel, setSelectedModel, availableModels,
+    customPrompts, onCustomPromptsChange, buildFinalPrompt,
     getAuthenticatedImageUrl, handleFileChange, handleUpload, handleUploadNew,
     handleCancelClick, confirmCancel, handleProcessSelected, handleExtractAll,
     user, onLogout
@@ -163,7 +165,73 @@ function InvoiceExtractorSecondHalf(props) {
     };
   };
 
-  // CONSOLIDATED EXPORT - All data in single sheet WITH TOTAL ROW - REMOVED - Now included in main export
+  // CRITICAL FIX: Add function to process data for DataTable like ConsolidatedView does
+  const getDataTableData = (activeTab) => {
+    // For individual category tabs, we need to process raw data like ConsolidatedView does
+    // to include page numbers and proper structure
+    
+    if (!allPagesData || allPagesData.length === 0) {
+      // Fallback to collectedResult if no raw data available
+      return collectedResult?.[activeTab] || [];
+    }
+    
+    const processedData = [];
+    
+    // Sort pages by page number to ensure correct order
+    const sortedPages = [...allPagesData].sort((a, b) => a.pageNumber - b.pageNumber);
+    
+    sortedPages.forEach(pageData => {
+      if (pageData.rawOutput) {
+        try {
+          // Parse the raw JSON output
+          let rawEntries = [];
+          
+          if (typeof pageData.rawOutput === 'string') {
+            rawEntries = JSON.parse(pageData.rawOutput);
+          } else if (Array.isArray(pageData.rawOutput)) {
+            rawEntries = pageData.rawOutput;
+          }
+          
+          // Process each entry from the raw JSON and filter by category
+          rawEntries.forEach(entry => {
+            if (entry.data && entry.category) {
+              // Convert category names to match activeTab format
+              const normalizedCategory = entry.category.toLowerCase().replace(/\s+/g, '');
+              const targetCategory = activeTab === 'labourTimesheet' ? 'labourtimesheet' :
+                                   activeTab === 'equipmentLog' ? 'equipmentlog' :
+                                   activeTab.toLowerCase();
+              
+              if (normalizedCategory === targetCategory) {
+                const flattenedEntry = {
+                  pageNumber: pageData.pageNumber,
+                  category: entry.category,
+                  referenceDocument: file?.name || 'Document.pdf',
+                  ...entry.data // Spread all data properties directly
+                };
+                processedData.push(flattenedEntry);
+              }
+            }
+          });
+        } catch (error) {
+          console.error(`Error parsing raw output for page ${pageData.pageNumber}:`, error);
+        }
+      }
+    });
+    
+    // If no raw data found, fall back to collectedResult
+    if (processedData.length === 0) {
+      const fallbackData = collectedResult?.[activeTab] || [];
+      return fallbackData.map(row => ({
+        ...row,
+        category: activeTab === 'labourTimesheet' ? 'Labour Timesheet' :
+                 activeTab === 'equipmentLog' ? 'Equipment Log' :
+                 activeTab.charAt(0).toUpperCase() + activeTab.slice(1),
+        referenceDocument: file?.name || 'Document.pdf'
+      }));
+    }
+    
+    return processedData;
+  };
 
   const exportToExcel = () => {
     if (!collectedResult) return;
@@ -546,22 +614,24 @@ function InvoiceExtractorSecondHalf(props) {
       XLSX.utils.book_append_sheet(wb, consolidatedWS, 'Consolidated');
     }
 
-    // Create enhanced worksheets for each category
+    // FIXED: Create enhanced worksheets for each category using getDataTableData function
     const categories = ['labour', 'labourTimesheet', 'material', 'equipment', 'equipmentLog', 'consumables', 'subtrade'];
     
     categories.forEach(category => {
-      const data = collectedResult[category];
+      // CRITICAL FIX: Use getDataTableData instead of collectedResult[category]
+      const data = getDataTableData(category);
+      
       if (data && data.length > 0) {
-        // Filter out userId and sessionId, keep pageNumber
+        // Get all unique keys from data and filter out userId, sessionId
         const allKeys = [...new Set(data.flatMap(row => Object.keys(row)))].filter(key => 
           key !== 'userId' && 
           key !== 'sessionId'
         );
-        
-        // Reorder: other fields first, then pageNumber second last, then referenceDocument at end
-        let orderedKeys = [];
+
+        // Reorder: category first, then other fields, then pageNumber second last, then referenceDocument at end
+        let orderedKeys = ['category'];
         allKeys.forEach(key => {
-          if (key !== 'pageNumber' && key !== 'referenceDocument') {
+          if (key !== 'category' && key !== 'pageNumber' && key !== 'referenceDocument') {
             orderedKeys.push(key);
           }
         });
@@ -580,6 +650,7 @@ function InvoiceExtractorSecondHalf(props) {
           // Headers with proper formatting - Serial Number first
           ['Serial Number', ...orderedKeys.map(key => {
             // Only handle the truly special compound cases
+            if (key === 'category') return 'Category';
             if (key === 'pageNumber') return 'Page Number';
             if (key === 'referenceDocument') return 'Reference Document';
             
@@ -593,6 +664,7 @@ function InvoiceExtractorSecondHalf(props) {
           sheetData.push([
             index + 1, // Serial Number starting from 1
             ...orderedKeys.map(key => {
+              if (key === 'category') return row[key] || (category === 'labourTimesheet' ? 'Labour Timesheet' : category === 'equipmentLog' ? 'Equipment Log' : category.charAt(0).toUpperCase() + category.slice(1));
               if (key === 'referenceDocument') return file?.name || 'Document.pdf';
               if ((key === 'TOTALAMOUNT' || key === 'totalAmount') && row[key] !== null && row[key] !== undefined) {
                 return parseFloat(row[key]) || 0; // Keep as number for currency formatting
@@ -757,6 +829,7 @@ function InvoiceExtractorSecondHalf(props) {
         ws['!cols'] = [
           { wch: 15 }, // Serial Number column
           ...orderedKeys.map(key => {
+            if (key === 'category') return { wch: 18 };
             if (key === 'pageNumber') return { wch: 12 };
             if (key === 'referenceDocument') return { wch: 30 };
             if (key === 'ITEMDESCRIPTION' || key === 'itemDescription') return { wch: 40 };
@@ -798,6 +871,13 @@ function InvoiceExtractorSecondHalf(props) {
 
   const getCurrentImageUrl = () => {
     if (viewMode === 'individual') {
+      // First check if we have the image in availableImages (client-side converted)
+      const availableImage = availableImages.find(img => img.pageNumber === selectedPage);
+      if (availableImage && availableImage.base64) {
+        return availableImage.base64; // Return base64 data directly
+      }
+      
+      // Fallback to allPagesData for server-side processed images
       const pageData = allPagesData.find(p => p.pageNumber === selectedPage);
       return pageData ? pageData.imageUrl : null;
     }
@@ -807,6 +887,14 @@ function InvoiceExtractorSecondHalf(props) {
   const availablePages = allPagesData.map(p => p.pageNumber).sort((a, b) => a - b);
 
   const handleViewPageReference = (pageNumber) => {
+    // First check availableImages (client-side converted)
+    const availableImage = availableImages.find(img => img.pageNumber === pageNumber);
+    if (availableImage && availableImage.base64) {
+      setSelectedRowImage(availableImage.base64);
+      return;
+    }
+    
+    // Fallback to allPagesData (server-side processed)
     const pageData = allPagesData.find(p => p.pageNumber === pageNumber);
     if (pageData && pageData.imageUrl) {
       setSelectedRowImage(pageData.imageUrl);
@@ -868,6 +956,12 @@ function InvoiceExtractorSecondHalf(props) {
             onFileChange={handleFileChange}
             onUpload={handleUpload}
             onCancel={handleCancelClick}
+            processingPhase={processingPhase}
+            conversionProgress={conversionProgress}
+            conversionStatus={conversionStatus}
+            customPrompts={customPrompts}
+            onCustomPromptsChange={onCustomPromptsChange}
+            buildFinalPrompt={buildFinalPrompt}
           />
         )}
 
@@ -884,16 +978,16 @@ function InvoiceExtractorSecondHalf(props) {
               <h2 className="text-2xl font-bold text-white mt-4 mb-2">Converting PDF to Images</h2>
               <p className="text-gray-300 mb-4">{processingStatus}</p>
               
-              {progress.total > 0 && (
+              {conversionProgress.total > 0 && (
                 <>
                   <div className="w-full bg-zinc-800 rounded-full h-3 mt-4">
                     <div
                       className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                      style={{ width: `${(conversionProgress.converted / conversionProgress.total) * 100}%` }}
                     ></div>
                   </div>
                   <p className="mt-2 text-sm text-gray-400">
-                    {Math.round((progress.current / progress.total) * 100)}% Complete ({progress.current}/{progress.total} pages)
+                    {Math.round((conversionProgress.converted / conversionProgress.total) * 100)}% Complete ({conversionProgress.converted}/{conversionProgress.total} pages)
                   </p>
                 </>
               )}
@@ -911,12 +1005,17 @@ function InvoiceExtractorSecondHalf(props) {
         {/* OPTIMIZED: Image Selection with Real-time Streaming */}
         {showImageSelection && processingPhase === 'selection' && (
           <ImageSelection
-            images={availableImages}
+            availableImages={availableImages}
             onProcessSelected={handleProcessSelected}
-            onSelectAll={handleExtractAll}
+            onExtractAll={handleExtractAll}
             loading={loading}
-            onUploadNew={handleUploadNew}
+            onCancel={handleUploadNew}
             conversionStatus={conversionStatus}
+            extractionPrompt={extractionPrompt}
+            setExtractionPrompt={setExtractionPrompt}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            availableModels={availableModels}
           />
         )}
 
@@ -953,6 +1052,28 @@ function InvoiceExtractorSecondHalf(props) {
               >
                 Cancel Analysis
               </button>
+
+              {/* Show processing results */}
+              {allPagesData.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-green-900 bg-opacity-30 border border-green-800 p-4 rounded-lg mt-6"
+                >
+                  <p className="text-green-400 font-semibold mb-2">AI Analysis Progress:</p>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {allPagesData.map(page => (
+                      <span 
+                        key={page.pageNumber} 
+                        className={`${page.error ? 'bg-red-600' : 'bg-green-600'} text-white px-3 py-1 rounded-full text-sm`}
+                        title={page.error || 'Success'}
+                      >
+                        Page {page.pageNumber} {page.error ? '❌' : '✅'}
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </div>
           </motion.div>
         )}
@@ -1071,7 +1192,11 @@ function InvoiceExtractorSecondHalf(props) {
                     </button>
                   </div>
                   <img 
-                    src={getAuthenticatedImageUrl(selectedRowImage)} 
+                    src={
+                      selectedRowImage && selectedRowImage.startsWith('data:') 
+                        ? selectedRowImage // Use base64 data directly
+                        : getAuthenticatedImageUrl(selectedRowImage) // Use authenticated URL for server images
+                    }
                     alt="Page Reference"
                     className="max-w-full h-auto rounded-lg"
                   />
@@ -1085,7 +1210,11 @@ function InvoiceExtractorSecondHalf(props) {
                 <h3 className="text-lg font-semibold text-white mb-2">Page {selectedPage} Image</h3>
                 <div className="overflow-auto max-h-96">
                   <img 
-                    src={getAuthenticatedImageUrl(getCurrentImageUrl())} 
+                    src={
+                      getCurrentImageUrl().startsWith('data:') 
+                        ? getCurrentImageUrl() // Use base64 data directly
+                        : getAuthenticatedImageUrl(getCurrentImageUrl()) // Use authenticated URL for server images
+                    }
                     alt={`Page ${selectedPage}`}
                     className="max-w-full h-auto border border-zinc-700 rounded"
                   />
@@ -1176,7 +1305,7 @@ function InvoiceExtractorSecondHalf(props) {
                 />
               ) : (
                 <DataTable 
-                  data={getCurrentData()?.[activeTab] || []}
+                  data={getDataTableData(activeTab)}
                   type={activeTab}
                   onViewPageReference={handleViewPageReference}
                   pageErrors={allPagesData.filter(p => p.error).map(p => ({ pageNumber: p.pageNumber, error: p.error }))}
