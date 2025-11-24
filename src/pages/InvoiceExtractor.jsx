@@ -86,6 +86,14 @@ IMPORTANT RULES:
 24. If a date is linked to a row, use key DATE. If the date appears in the header or footer, use key INVOICE DATE. Include INVOICE DATE in every JSON row.
 25. Sometimes Description is in multiple lines, do not confused and count them as different rows.
 26. do not add '_' in any key field. keep space if it contains multiple words.
+27. While fetching data from a table, some rows in a column may be empty, or sometimes the entire column might be empty. This does not mean you should use values from the next column to fill in these empty rows.
+28. If you identify PR Hours, it is same as overtime hour.
+If you identify Reg. Hours, it is the same as normal/regular hour.
+Overtime/PR hour can be there with any regular/normal hours.
+29.Treat any blank cell as the number 0.
+Keep the exact number of columns for every row.
+Maintain strict row-column alignment.
+If a value is unclear, output as number 0 instead of shifting it into another column.
 
 Return ONLY the JSON array, no explanations or additional text.`;
 
@@ -134,7 +142,7 @@ function InvoiceExtractor({ user, onLogout }) {
     if (customPrompts.length > 0) {
       // Add custom prompts starting from point 27
       customPrompts.forEach((prompt, index) => {
-        const pointNumber = 27 + index;
+        const pointNumber = 29 + index;
         finalPrompt += `\n${pointNumber}. ${prompt}`;
       });
     }
