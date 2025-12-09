@@ -97,6 +97,67 @@ If a value is unclear, output as number 0 instead of shifting it into another co
 
 Return ONLY the JSON array, no explanations or additional text.`;
 
+
+// NEW FRESH PROMPT - EXACTLY AS YOU SPECIFIED
+const DEFAULT_EXTRACTION_FRESH_PROMPT = `You are a data extraction specialist. Extract information from this invoice/document image and categorize it into one of these categories:
+1. Labour
+2. Material
+3. Equipment
+4. Consumables
+5. Subtrade
+6. LabourTimesheet
+7. EquipmentLog
+
+For each item found, extract ALL available fields and return a JSON object with:
+- category: (Labour/Material/Equipment/Consumables/Subtrade/LabourTimesheet/EquipmentLog)
+- data: object containing all extracted fields
+
+CATEGORY CLASSIFICATION RULES:
+- Labour: Use when labour data contains price/cost/amount fields (UNITRATE, TOTALAMOUNT, etc.)
+- LabourTimesheet: Use when labour data does NOT contain any price/cost/amount fields (just time tracking)
+- Equipment: Use when equipment data contains price/cost/amount fields (UNITRATE, TOTALAMOUNT, etc.)
+- EquipmentLog: Use when equipment data does NOT contain any price/cost/amount fields (just usage tracking)
+
+LABOUR fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, INVOICENO, EMPLOYEENAME, EMPLOYEECODE, POSITION, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE
+- TOTALHOURS, TOTALHOURSMANUAL, BACKUPHOURS, PR HOURS, OT HOURS, DT HOURS, REG HOURS
+- VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, SUBTOTAL, MARK UP, REG RATE, PR RATE
+
+LABOUR TIMESHEET fields (extract if present - NO PRICE FIELDS - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, EMPLOYEENAME, EMPLOYEECODE, POSITION, ITEMDESCRIPTION, SUBCATEGORY, AREA
+- TIMEIN, TIMEOUT, LUNCHBREAK, TOTALHOURS, TOTALHOURSMANUAL, BACKUPHOURS, PR HOURS, OT HOURS, DT HOURS, REG HOURS
+- VARIANCE, REG RATE, PR RATE
+
+MATERIAL/CONSUMABLES fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE
+- QTY, BACKUPQTY, VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, PR HOURS, OT HOURS, DT HOURS, REG HOURS, MARK UP, REG RATE, PR RATE
+
+EQUIPMENT fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, ITEMDESCRIPTION, SUBCATEGORY, INVOICE DATE, PR HOURS, OT HOURS, DT HOURS, REG HOURS
+- QTY, BACKUPQTY, VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, MARK UP, REG RATE, PR RATE
+
+EQUIPMENT LOG fields (extract if present - NO PRICE FIELDS - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, ITEM, CATEGORY, ITEMDESCRIPTION, OPERATORNAME, SUBCATEGORY, AREA, INVOICE DATE
+- QTY, BACKUPQTY, VARIANCE, UOM, HOURSUSED, STARTTIME, ENDTIME, PR HOURS, OT HOURS, DT HOURS, REG HOURS
+
+SUBTRADE fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
+- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, VENDORNAME, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE, PR HOURS, OT HOURS, DT HOURS, REG HOURS
+- QTY, BACKUPQTY, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, MARK UP, REG RATE, PR RATE
+
+IMPORTANT RULES:
+1. Extract ALL text visible in the image
+2. If a field is not present, omit it from the JSON
+3. Return ONLY valid JSON array format: [{"category": "...", "data": {...}}, ...]
+4. If multiple items are present, return multiple objects in the array
+5. Use exact field names as specified above (ALL CAPITAL LETTERS)
+6. For numeric values, extract as numbers not strings
+7. For dates, use format: DD/MM/YYYY 
+8. For time fields, use format: HH:MM or as shown in document
+9. If the page is blank or has no extractable data, return an empty array: []
+10. Sometimes amount is there but quantity is not there than give it as TOTALAMOUNT.`;
+
+
+
 function InvoiceExtractor({ user, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,6 +185,9 @@ function InvoiceExtractor({ user, onLogout }) {
   const [conversionStatus, setConversionStatus] = useState({ conversionComplete: false, allConverted: false });
 
   // New state for prompt management
+  const [useFreshPrompt, setUseFreshPrompt] = useState(false);
+  const [freshCustomRules, setFreshCustomRules] = useState([]);
+
   const [extractionPrompt, setExtractionPrompt] = useState(DEFAULT_EXTRACTION_PROMPT);
   const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash');
   const [availableModels, setAvailableModels] = useState([
@@ -135,14 +199,31 @@ function InvoiceExtractor({ user, onLogout }) {
   // Custom prompts state
   const [customPrompts, setCustomPrompts] = useState([]);
 
-  // Function to build final prompt with custom prompts
+// Function to build final prompt with custom prompts
   const buildFinalPrompt = () => {
+    // NEW LOGIC: Check if using fresh prompt
+    if (useFreshPrompt) {
+      let finalPrompt = DEFAULT_EXTRACTION_FRESH_PROMPT;
+      
+      if (freshCustomRules.length > 0) {
+        // Add fresh custom rules starting from point 10
+        freshCustomRules.forEach((rule, index) => {
+          const pointNumber = 11 + index;
+          finalPrompt += `\n${pointNumber}. ${rule}`;
+        });
+      }
+      
+      finalPrompt += `\n\nReturn ONLY the JSON array, no explanations or additional text.`;
+      return finalPrompt;
+    }
+    
+    // EXISTING LOGIC: Use default prompt with custom rules
     let finalPrompt = extractionPrompt;
     
     if (customPrompts.length > 0) {
-      // Add custom prompts starting from point 27
+      // Add custom prompts starting from point 29
       customPrompts.forEach((prompt, index) => {
-        const pointNumber = 29 + index;
+        const pointNumber = 30 + index;
         finalPrompt += `\n${pointNumber}. ${prompt}`;
       });
     }
@@ -153,6 +234,15 @@ function InvoiceExtractor({ user, onLogout }) {
   // Handle custom prompts change
   const handleCustomPromptsChange = (newCustomPrompts) => {
     setCustomPrompts(newCustomPrompts);
+  };
+  // NEW HANDLER FOR FRESH PROMPT TOGGLE
+  const handleUseFreshPromptChange = (newValue) => {
+    setUseFreshPrompt(newValue);
+  };
+
+  // NEW HANDLER FOR FRESH CUSTOM RULES
+  const handleFreshCustomRulesChange = (newFreshCustomRules) => {
+    setFreshCustomRules(newFreshCustomRules);
   };
 
   const abortControllerRef = useRef(null);
@@ -500,6 +590,14 @@ function InvoiceExtractor({ user, onLogout }) {
         pageNumber: img.pageNumber
       }));
 
+      const finalPrompt = buildFinalPrompt();
+    console.log('🔥 PROMPT BEING SENT TO BACKEND:');
+    console.log('Fresh Prompt Mode:', useFreshPrompt);
+    console.log('Prompt Length:', finalPrompt.length);
+    console.log('Full Prompt:', finalPrompt);
+    console.log('Model:', modelToUse);
+    console.log('---END PROMPT---');
+
       // Choose endpoint based on number of images
       const endpoint = imagesData.length === 1 ? '/api/images/process-image' : '/api/images/process-batch-images';
       
@@ -510,14 +608,14 @@ function InvoiceExtractor({ user, onLogout }) {
           image: imagesData[0].image,
           pageNumber: imagesData[0].pageNumber,
           model: modelToUse,
-          prompt: buildFinalPrompt() // Use the prompt with custom additions
+          prompt: finalPrompt // Use the prompt with custom additions
         };
       } else {
         // Batch images
         requestBody = {
           images: imagesData,
           model: modelToUse,
-          prompt: buildFinalPrompt() // Use the prompt with custom additions
+          prompt: finalPrompt // Use the prompt with custom additions
         };
       }
 
@@ -706,6 +804,15 @@ function InvoiceExtractor({ user, onLogout }) {
       handleExtractAll={handleExtractAll}
       user={user}
       onLogout={onLogout}
+      
+
+      // NEW FRESH PROMPT PROPS
+      useFreshPrompt={useFreshPrompt}
+      onUseFreshPromptChange={handleUseFreshPromptChange}
+      freshCustomRules={freshCustomRules}
+      onFreshCustomRulesChange={handleFreshCustomRulesChange}
+
+
     />
   );
 }

@@ -10,17 +10,18 @@ import ConsolidatedView from '../components/ConsolidatedView';
 function InvoiceExtractorSecondHalf(props) {
   // Extract all props
   const {
-    file, loading, progress, allPagesData, collectedResult, error, activeTab, setActiveTab,
-    viewMode, setViewMode, selectedPage, setSelectedPage, showRaw, setShowRaw,
-    showImage, setShowImage, selectedRowImage, setSelectedRowImage, processingStatus,
-    showCancelConfirm, setShowCancelConfirm, sessionId, showImageSelection,
-    availableImages, processingPhase, conversionProgress, conversionStatus,
-    extractionPrompt, setExtractionPrompt, selectedModel, setSelectedModel, availableModels,
-    customPrompts, onCustomPromptsChange, buildFinalPrompt,
-    getAuthenticatedImageUrl, handleFileChange, handleUpload, handleUploadNew,
-    handleCancelClick, confirmCancel, handleProcessSelected, handleExtractAll,
-    user, onLogout
-  } = props;
+  file, loading, progress, allPagesData, collectedResult, error, activeTab, setActiveTab,
+  viewMode, setViewMode, selectedPage, setSelectedPage, showRaw, setShowRaw,
+  showImage, setShowImage, selectedRowImage, setSelectedRowImage, processingStatus,
+  showCancelConfirm, setShowCancelConfirm, sessionId, showImageSelection,
+  availableImages, processingPhase, conversionProgress, conversionStatus,
+  extractionPrompt, setExtractionPrompt, selectedModel, setSelectedModel, availableModels,
+  customPrompts, onCustomPromptsChange, buildFinalPrompt,
+  useFreshPrompt, onUseFreshPromptChange, freshCustomRules, onFreshCustomRulesChange,
+  getAuthenticatedImageUrl, handleFileChange, handleUpload, handleUploadNew,
+  handleCancelClick, confirmCancel, handleProcessSelected, handleExtractAll,
+  user, onLogout
+} = props;
 
   // Helper function to identify currency columns - ONLY FOR EXCEL FORMATTING
   const isCurrencyColumn = (fieldName) => {
@@ -962,6 +963,10 @@ function InvoiceExtractorSecondHalf(props) {
             customPrompts={customPrompts}
             onCustomPromptsChange={onCustomPromptsChange}
             buildFinalPrompt={buildFinalPrompt}
+            useFreshPrompt={useFreshPrompt}
+            onUseFreshPromptChange={onUseFreshPromptChange}
+            freshCustomRules={freshCustomRules}
+            onFreshCustomRulesChange={onFreshCustomRulesChange}
           />
         )}
 
