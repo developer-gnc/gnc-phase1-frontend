@@ -100,50 +100,9 @@ Return ONLY the JSON array, no explanations or additional text.`;
 
 // NEW FRESH PROMPT - EXACTLY AS YOU SPECIFIED
 const DEFAULT_EXTRACTION_FRESH_PROMPT = `You are a data extraction specialist. Extract information from this invoice/document image and categorize it into one of these categories:
-1. Labour
-2. Material
-3. Equipment
-4. Consumables
-5. Subtrade
-6. LabourTimesheet
-7. EquipmentLog
 
-For each item found, extract ALL available fields and return a JSON object with:
-- category: (Labour/Material/Equipment/Consumables/Subtrade/LabourTimesheet/EquipmentLog)
-- data: object containing all extracted fields
 
-CATEGORY CLASSIFICATION RULES:
-- Labour: Use when labour data contains price/cost/amount fields (UNITRATE, TOTALAMOUNT, etc.)
-- LabourTimesheet: Use when labour data does NOT contain any price/cost/amount fields (just time tracking)
-- Equipment: Use when equipment data contains price/cost/amount fields (UNITRATE, TOTALAMOUNT, etc.)
-- EquipmentLog: Use when equipment data does NOT contain any price/cost/amount fields (just usage tracking)
-
-LABOUR fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, INVOICENO, EMPLOYEENAME, EMPLOYEECODE, POSITION, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE
-- TOTALHOURS, TOTALHOURSMANUAL, BACKUPHOURS, PR HOURS, OT HOURS, DT HOURS, REG HOURS
-- VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, SUBTOTAL, MARK UP, REG RATE, PR RATE
-
-LABOUR TIMESHEET fields (extract if present - NO PRICE FIELDS - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, EMPLOYEENAME, EMPLOYEECODE, POSITION, ITEMDESCRIPTION, SUBCATEGORY, AREA
-- TIMEIN, TIMEOUT, LUNCHBREAK, TOTALHOURS, TOTALHOURSMANUAL, BACKUPHOURS, PR HOURS, OT HOURS, DT HOURS, REG HOURS
-- VARIANCE, REG RATE, PR RATE
-
-MATERIAL/CONSUMABLES fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE
-- QTY, BACKUPQTY, VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, PR HOURS, OT HOURS, DT HOURS, REG HOURS, MARK UP, REG RATE, PR RATE
-
-EQUIPMENT fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, ITEMDESCRIPTION, SUBCATEGORY, INVOICE DATE, PR HOURS, OT HOURS, DT HOURS, REG HOURS
-- QTY, BACKUPQTY, VARIANCE, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, MARK UP, REG RATE, PR RATE
-
-EQUIPMENT LOG fields (extract if present - NO PRICE FIELDS - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, ITEM, CATEGORY, ITEMDESCRIPTION, OPERATORNAME, SUBCATEGORY, AREA, INVOICE DATE
-- QTY, BACKUPQTY, VARIANCE, UOM, HOURSUSED, STARTTIME, ENDTIME, PR HOURS, OT HOURS, DT HOURS, REG HOURS
-
-SUBTRADE fields (extract if present - ALL FIELD NAMES MUST BE CAPITAL):
-- SRNO, DATE, DAY, INVOICENO, ITEM, CATEGORY, VENDORNAME, ITEMDESCRIPTION, SUBCATEGORY, AREA, INVOICE DATE, PR HOURS, OT HOURS, DT HOURS, REG HOURS
-- QTY, BACKUPQTY, UOM, UNITRATE, TOTALAMOUNT, O&P, REMOVE, REPLACE, TAX, SUBTOTAL, MARK UP, REG RATE, PR RATE
-
+keep category value NA if category value is not present and add category key with NA value in json.
 IMPORTANT RULES:
 1. Extract ALL text visible in the image
 2. If a field is not present, omit it from the JSON
