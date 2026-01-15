@@ -100,9 +100,20 @@ Return ONLY the JSON array, no explanations or additional text.`;
 
 // NEW FRESH PROMPT - EXACTLY AS YOU SPECIFIED
 const DEFAULT_EXTRACTION_FRESH_PROMPT = `You are a data extraction specialist. Extract information from this invoice/document image and categorize it into one of these categories:
+1. Labour
+2. Material
+3. Equipment
+4. Consumables
+5. Subtrade
+6. LabourTimesheet
+7. EquipmentLog
+
+For each item found, extract ALL available fields and return a JSON object with:
+- category: (Labour/Material/Equipment/Consumables/Subtrade/LabourTimesheet/EquipmentLog)
+- data: object containing all extracted fields
 
 
-keep category value NA if category value is not present and add category key with NA value in json.
+
 IMPORTANT RULES:
 1. Extract ALL text visible in the image
 2. If a field is not present, omit it from the JSON
