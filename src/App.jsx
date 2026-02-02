@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import InvoiceExtractor from './pages/InvoiceExtractor';
+import UnitRateExtractor from './pages/UnitRateExtractor';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -13,7 +14,6 @@ function App() {
   const location = useLocation();
 
   useEffect(() => {
-    // Don't check auth on callback page - let AuthCallback handle it
     if (location.pathname === '/auth/callback') {
       setLoading(false);
       return;
@@ -84,6 +84,10 @@ function App() {
       <Route 
         path="/invoice-extractor" 
         element={user ? <InvoiceExtractor user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
+      />
+      <Route 
+        path="/unitrateextractor" 
+        element={user ? <UnitRateExtractor /> : <Navigate to="/login" />} 
       />
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
     </Routes>

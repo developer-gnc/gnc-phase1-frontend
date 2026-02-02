@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/unitrateextractor/:path*",
-      "destination": "https://unitrateextractor-njmmko8xusxzrc7pbbobxe.streamlit.app/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -92,7 +92,7 @@ function Dashboard({ user, onLogout }) {
           </Link>
 
           {/* Unit Rate Explorer Tool */}
-          <a href="/unitrateextractor">
+          <Link to="/unitrateextractor">
             <motion.div
               whileHover={{ scale: 1.03, y: -5 }}
               whileTap={{ scale: 0.98 }}
