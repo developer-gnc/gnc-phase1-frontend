@@ -14,6 +14,7 @@ function App() {
   const location = useLocation();
 
   useEffect(() => {
+    // Don't check auth on callback page - let AuthCallback handle it
     if (location.pathname === '/auth/callback') {
       setLoading(false);
       return;
