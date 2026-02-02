@@ -27,12 +27,12 @@ function Dashboard({ user, onLogout }) {
                 >
                   Invoice Extractor
                 </Link>
-                <a 
-                  href="/unitrateextractor" 
+                <Link 
+                  to="/unitrateextractor" 
                   className="text-gray-400 hover:text-white font-medium transition-colors"
                 >
                   Unit Rate Explorer
-                </a>
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -108,7 +108,7 @@ function Dashboard({ user, onLogout }) {
                 Explore and analyze unit rates by province, city, year, and month
               </p>
             </motion.div>
-          </a>
+          </Link>
 
           {/* Placeholder for future tools */}
           <motion.div
