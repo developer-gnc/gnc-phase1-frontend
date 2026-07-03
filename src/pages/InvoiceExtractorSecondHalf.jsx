@@ -20,7 +20,7 @@ function InvoiceExtractorSecondHalf(props) {
   useFreshPrompt, onUseFreshPromptChange, freshCustomRules, onFreshCustomRulesChange,
   getAuthenticatedImageUrl, handleFileChange, handleUpload, handleUploadNew,
   handleCancelClick, confirmCancel, handleProcessSelected, handleExtractAll,
-  user, onLogout
+  user, onLogout, apiCost
 } = props;
 
   // Helper function to identify currency columns - ONLY FOR EXCEL FORMATTING
@@ -1097,6 +1097,21 @@ function InvoiceExtractorSecondHalf(props) {
                 <div>
                   <h2 className="text-2xl font-bold text-white mb-2">Extraction Results</h2>
                   <p className="text-gray-400">Document: <span className="text-blue-400 font-medium">{file?.name || 'Unknown Document'}</span></p>
+                  {apiCost && (
+                    <div className="mt-2 inline-flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-400 text-xs uppercase tracking-wide font-semibold">API Cost</span>
+                        <span className="text-green-400 font-mono font-bold text-base">${apiCost.totalCost.toFixed(4)}</span>
+                      </div>
+                      <div className="h-4 w-px bg-zinc-600"></div>
+                      <div className="text-xs text-gray-500 space-x-3">
+                        <span>In: <span className="text-gray-300 font-mono">{apiCost.inputTokens.toLocaleString()}</span> tok <span className="text-gray-400">(${apiCost.inputCost.toFixed(4)})</span></span>
+                        <span>Out: <span className="text-gray-300 font-mono">{apiCost.outputTokens.toLocaleString()}</span> tok <span className="text-gray-400">(${apiCost.outputCost.toFixed(4)})</span></span>
+                      </div>
+                      <div className="h-4 w-px bg-zinc-600"></div>
+                      <span className="text-xs text-zinc-500 font-medium">{apiCost.model}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-3">

@@ -163,8 +163,15 @@ function InvoiceExtractor({ user, onLogout }) {
   const [availableModels, setAvailableModels] = useState([
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient (Current)' },
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower processing' }
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower processing' },
+    { value: 'claude-opus-4-8', label: 'Claude Opus 4', description: 'Highest accuracy, slower processing' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4', description: 'Balanced speed and accuracy' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4', description: 'Fastest Claude model' },
+    { value: 'gpt-4o', label: 'GPT-4o', description: 'OpenAI multimodal, high accuracy' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast and cost-effective' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'High accuracy, vision enabled' }
   ]);
+  const [apiCost, setApiCost] = useState(null);
   
   // Custom prompts state
   const [customPrompts, setCustomPrompts] = useState([]);
@@ -545,6 +552,7 @@ function InvoiceExtractor({ user, onLogout }) {
     setError(null);
     setAllPagesData([]);
     setCollectedResult(null);
+    setApiCost(null);
     setProcessingStatus(`Starting AI analysis with ${modelToUse}...`);
     setProcessingPhase('processing');
     isProcessingRef.current = true;
@@ -644,6 +652,7 @@ function InvoiceExtractor({ user, onLogout }) {
                 setProcessingStatus(data.message);
               } else if (data.type === 'complete') {
                 setCollectedResult(data.collectedResult);
+                if (data.apiCost) setApiCost(data.apiCost);
                 if (data.allPagesData) {
                   setAllPagesData(data.allPagesData);
                 } else if (data.pageData) {
@@ -775,6 +784,9 @@ function InvoiceExtractor({ user, onLogout }) {
       user={user}
       onLogout={onLogout}
       
+
+      // API cost
+      apiCost={apiCost}
 
       // NEW FRESH PROMPT PROPS
       useFreshPrompt={useFreshPrompt}
