@@ -128,50 +128,6 @@ IMPORTANT RULES:
 
 
 
-const parseAmount = (val) => {
-  if (val == null || val === '') return 0;
-  const cleaned = String(val).replace(/[$,\s]/g, '');
-  const n = parseFloat(cleaned);
-  return isNaN(n) ? 0 : n;
-};
-
-const calcCategoryTotal = (items) =>
-  (items || []).reduce((sum, item) => sum + parseAmount(item.TOTALAMOUNT ?? item.totalAmount), 0);
-
-const saveExtractionSummary = (collectedResult, fileName) => {
-  if (!collectedResult) return;
-  const totals = {
-    labour: calcCategoryTotal(collectedResult.labour),
-    labourTimesheet: calcCategoryTotal(collectedResult.labourTimesheet),
-    material: calcCategoryTotal(collectedResult.material),
-    equipment: calcCategoryTotal(collectedResult.equipment),
-    equipmentLog: calcCategoryTotal(collectedResult.equipmentLog),
-    consumables: calcCategoryTotal(collectedResult.consumables),
-    subtrade: calcCategoryTotal(collectedResult.subtrade),
-  };
-  const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
-  const counts = {
-    labour: (collectedResult.labour || []).length,
-    labourTimesheet: (collectedResult.labourTimesheet || []).length,
-    material: (collectedResult.material || []).length,
-    equipment: (collectedResult.equipment || []).length,
-    equipmentLog: (collectedResult.equipmentLog || []).length,
-    consumables: (collectedResult.consumables || []).length,
-    subtrade: (collectedResult.subtrade || []).length,
-  };
-  const totalItems = Object.values(counts).reduce((a, b) => a + b, 0);
-  const summary = {
-    fileName: fileName || 'Unknown File',
-    extractedAt: new Date().toISOString(),
-    totals,
-    grandTotal,
-    counts,
-    totalItems,
-  };
-  console.log('[ExtractionSummary] Saving to localStorage:', summary);
-  localStorage.setItem('lastExtractionSummary', JSON.stringify(summary));
-};
-
 function InvoiceExtractor({ user, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -205,14 +161,9 @@ function InvoiceExtractor({ user, onLogout }) {
   const [extractionPrompt, setExtractionPrompt] = useState(DEFAULT_EXTRACTION_PROMPT);
   const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash');
   const [availableModels, setAvailableModels] = useState([
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient', provider: 'Google' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy', provider: 'Google' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate Gemini model', provider: 'Google' },
-    { value: 'gpt-4o', label: 'GPT-4o', description: 'OpenAI flagship — high accuracy', provider: 'OpenAI' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'OpenAI fast and cost-efficient', provider: 'OpenAI' },
-    { value: 'claude-opus-4-8', label: 'Claude Opus', description: 'Most capable Claude model', provider: 'Anthropic' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet', description: 'Balanced speed and accuracy', provider: 'Anthropic' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku', description: 'Fastest Claude model', provider: 'Anthropic' }
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient (Current)' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower processing' }
   ]);
   
   // Custom prompts state
@@ -321,8 +272,8 @@ function InvoiceExtractor({ user, onLogout }) {
           
           await page.render(renderContext).promise;
           
-          // Convert canvas to base64 JPEG (much smaller than PNG, 85% quality is sufficient for OCR)
-          const base64 = canvas.toDataURL('image/jpeg', 0.85);
+          // Convert canvas to base64 image
+          const base64 = canvas.toDataURL('image/png', 0.9); // 90% quality for smaller size
           
           const newImage = {
             pageNumber: pageNum,
@@ -693,7 +644,6 @@ function InvoiceExtractor({ user, onLogout }) {
                 setProcessingStatus(data.message);
               } else if (data.type === 'complete') {
                 setCollectedResult(data.collectedResult);
-                saveExtractionSummary(data.collectedResult, file?.name);
                 if (data.allPagesData) {
                   setAllPagesData(data.allPagesData);
                 } else if (data.pageData) {
@@ -730,7 +680,6 @@ function InvoiceExtractor({ user, onLogout }) {
             const data = JSON.parse(jsonStr);
             if (data.type === 'complete') {
               setCollectedResult(data.collectedResult);
-              saveExtractionSummary(data.collectedResult, file?.name);
               if (data.allPagesData) {
                 setAllPagesData(data.allPagesData);
               }

@@ -1,32 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
 
 function Dashboard({ user, onLogout }) {
-  const [lastExtraction, setLastExtraction] = useState(null);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lastExtractionSummary');
-      if (saved) setLastExtraction(JSON.parse(saved));
-    } catch (e) { /* ignore */ }
-  }, []);
-
-  const fmt = (n) => {
-    const num = typeof n === 'number' ? n : parseFloat(String(n || '0').replace(/[$,\s]/g, '')) || 0;
-    return `$${num.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const categoryRows = lastExtraction ? [
-    { label: 'Labour', key: 'labour' },
-    { label: 'Labour Timesheet', key: 'labourTimesheet' },
-    { label: 'Material', key: 'material' },
-    { label: 'Equipment', key: 'equipment' },
-    { label: 'Equipment Log', key: 'equipmentLog' },
-    { label: 'Consumables', key: 'consumables' },
-    { label: 'Subtrade', key: 'subtrade' },
-  ].filter(row => (lastExtraction.counts?.[row.key] ?? 0) > 0) : [];
-
   return (
     <div className="min-h-screen bg-black">
       {/* Navbar */}
@@ -34,26 +9,26 @@ function Dashboard({ user, onLogout }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
-              <img 
-                src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png" 
-                alt="GNC Group Logo" 
+              <img
+                src="https://gncgroup.ca/wp-content/uploads/2025/02/gnc-logo.png"
+                alt="GNC Group Logo"
                 className="h-10 sm:h-12 w-auto"
               />
               <div className="hidden md:flex gap-4">
-                <Link 
-                  to="/dashboard" 
+                <Link
+                  to="/dashboard"
                   className="text-gray-400 hover:text-white font-medium transition-colors"
                 >
                   Dashboard
                 </Link>
-                <Link 
-                  to="/invoice-extractor" 
+                <Link
+                  to="/invoice-extractor"
                   className="text-gray-400 hover:text-white font-medium transition-colors"
                 >
                   Invoice Extractor
                 </Link>
-                <Link 
-                  to="/unitrateextractor" 
+                <Link
+                  to="/unitrateextractor"
                   className="text-gray-400 hover:text-white font-medium transition-colors"
                 >
                   Unit Rate Explorer
@@ -72,7 +47,7 @@ function Dashboard({ user, onLogout }) {
           </div>
         </div>
       </nav>
-      
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Welcome Section */}
@@ -153,53 +128,6 @@ function Dashboard({ user, onLogout }) {
             </p>
           </motion.div>
         </motion.div>
-
-        {/* Last Extraction Cost Summary */}
-        {lastExtraction && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.35 }}
-            className="mt-10 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-white">Last Extraction Result</h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {lastExtraction.fileName} &mdash; {new Date(lastExtraction.extractedAt).toLocaleString()}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Grand Total</p>
-                <p className="text-2xl font-bold text-green-400">{fmt(lastExtraction.grandTotal)}</p>
-              </div>
-            </div>
-
-            {categoryRows.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {categoryRows.map(row => (
-                  <div key={row.key} className="bg-zinc-800 rounded-xl px-4 py-3">
-                    <p className="text-xs text-gray-400 mb-1">{row.label}</p>
-                    <p className="text-base font-semibold text-white">{fmt(lastExtraction.totals[row.key])}</p>
-                    <p className="text-xs text-gray-500">{lastExtraction.counts[row.key]} item{lastExtraction.counts[row.key] !== 1 ? 's' : ''}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No cost data found in last extraction.</p>
-            )}
-
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-xs text-gray-600">{lastExtraction.totalItems} total items extracted</p>
-              <Link
-                to="/invoice-extractor"
-                className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
-              >
-                Run new extraction →
-              </Link>
-            </div>
-          </motion.div>
-        )}
 
         {/* User Info Card */}
         <motion.div

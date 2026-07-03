@@ -139,14 +139,10 @@ function InvoiceExtractorSecondHalf(props) {
   const calculateGrandTotals = () => {
     if (!collectedResult) return null;
 
-    const parseAmt = (val) => {
-      if (val == null || val === '') return 0;
-      const n = parseFloat(String(val).replace(/[$,\s]/g, ''));
-      return isNaN(n) ? 0 : n;
-    };
-
     const calculateTotal = (data) => data.reduce((sum, item) => {
-      return sum + parseAmt(item.TOTALAMOUNT ?? item.totalAmount);
+      // Handle both TOTALAMOUNT (CAPITAL) and totalAmount (camelCase)
+      const amount = parseFloat(item.TOTALAMOUNT || item.totalAmount) || 0;
+      return sum + amount;
     }, 0);
 
     const labourTotal = calculateTotal(collectedResult.labour);
@@ -1123,44 +1119,6 @@ function InvoiceExtractorSecondHalf(props) {
                 </div>
               </div>
 
-              {/* Cost Summary Banner */}
-              {(() => {
-                const totals = calculateGrandTotals();
-                if (!totals) return null;
-                const fmtAmt = (n) => `$${n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                const categories = [
-                  { label: 'Labour', key: 'labour' },
-                  { label: 'Material', key: 'material' },
-                  { label: 'Equipment', key: 'equipment' },
-                  { label: 'Consumables', key: 'consumables' },
-                  { label: 'Subtrade', key: 'subtrade' },
-                  { label: 'Labour Timesheet', key: 'labourTimesheet' },
-                  { label: 'Equipment Log', key: 'equipmentLog' },
-                ].filter(c => (collectedResult?.[c.key]?.length || 0) > 0);
-                return (
-                  <div className="mt-5 border-t border-zinc-800 pt-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                      <p className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Invoice Cost Summary</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-xs text-gray-500">Grand Total</span>
-                        <span className="text-2xl font-bold text-green-400">{fmtAmt(totals.grandTotal)}</span>
-                      </div>
-                    </div>
-                    {categories.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
-                        {categories.map(c => (
-                          <div key={c.key} className="bg-zinc-800 rounded-lg px-3 py-2 text-center">
-                            <p className="text-xs text-gray-400 mb-1 truncate">{c.label}</p>
-                            <p className="text-sm font-semibold text-white">{fmtAmt(totals[c.key])}</p>
-                            <p className="text-xs text-gray-600">{collectedResult[c.key].length} item{collectedResult[c.key].length !== 1 ? 's' : ''}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              
               {/* View Mode Toggle */}
               <div className="mt-6 flex flex-wrap gap-2">
                 <button

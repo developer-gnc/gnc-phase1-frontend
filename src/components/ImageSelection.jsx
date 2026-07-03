@@ -213,14 +213,9 @@ function ImageSelection({
   }, [navigateImage]);
 
   const modelOptions = [
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient', provider: 'Google' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy', provider: 'Google' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate Gemini model', provider: 'Google' },
-    { value: 'gpt-4o', label: 'GPT-4o', description: 'OpenAI flagship — high accuracy', provider: 'OpenAI' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'OpenAI fast and cost-efficient', provider: 'OpenAI' },
-    { value: 'claude-opus-4-8', label: 'Claude Opus', description: 'Most capable Claude model', provider: 'Anthropic' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet', description: 'Balanced speed and accuracy', provider: 'Anthropic' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku', description: 'Fastest Claude model', provider: 'Anthropic' }
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient (Current)' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower processing' }
   ];
 
   return (
@@ -568,40 +563,35 @@ function ImageSelection({
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-white mb-2">Select AI Model</h3>
                 <p className="text-gray-400 text-sm">
-                  Choose from Gemini, OpenAI, or Claude models for data extraction
+                  Choose which Gemini model to use for data extraction
                 </p>
               </div>
 
-              <div className="space-y-2 mb-6 max-h-80 overflow-y-auto pr-1">
-                {['Google', 'OpenAI', 'Anthropic'].map((provider) => (
-                  <div key={provider}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1 mt-3 px-1">{provider}</p>
-                    {modelOptions.filter(m => m.provider === provider).map((model) => (
-                      <button
-                        key={model.value}
-                        onClick={() => setSelectedModel(model.value)}
-                        className={`w-full text-left p-3 rounded-xl border-2 transition-all mb-1 ${
-                          selectedModel === model.value
-                            ? 'border-blue-500 bg-blue-500 bg-opacity-10'
-                            : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-base font-semibold text-white">{model.label}</h4>
-                              {selectedModel === model.value && (
-                                <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-400 mt-0.5">{model.description}</p>
-                          </div>
+              <div className="space-y-3 mb-8">
+                {modelOptions.map((model) => (
+                  <button
+                    key={model.value}
+                    onClick={() => setSelectedModel(model.value)}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                      selectedModel === model.value
+                        ? 'border-blue-500 bg-blue-500 bg-opacity-10'
+                        : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-lg font-semibold text-white">{model.label}</h4>
+                          {selectedModel === model.value && (
+                            <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          )}
                         </div>
-                      </button>
-                    ))}
-                  </div>
+                        <p className="text-sm text-gray-400 mt-1">{model.description}</p>
+                      </div>
+                    </div>
+                  </button>
                 ))}
               </div>
 
@@ -612,7 +602,7 @@ function ImageSelection({
                   </svg>
                   <div className="flex-1">
                     <p className="text-sm text-blue-300">
-                      <strong>Tip:</strong> Flash/Mini/Haiku models are fastest for large documents. GPT-4o, Claude Opus, and Gemini Pro give the highest accuracy for complex documents.
+                      <strong>Tip:</strong> Flash models are faster for large documents, while Pro provides higher accuracy for complex invoices.
                     </p>
                   </div>
                 </div>
