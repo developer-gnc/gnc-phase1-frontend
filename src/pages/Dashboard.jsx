@@ -33,18 +33,10 @@ function Dashboard({ user, onLogout }) {
                 >
                   Unit Rate Explorer
                 </Link>
-                <Link
-                  to="/claims-dashboard"
-                  className="text-gray-400 hover:text-white font-medium transition-colors"
-                >
-                  Claims Dashboard
-                </Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-400 hidden sm:block">
-                {user.email}
-              </span>
+              <span className="text-sm text-gray-400 hidden sm:block">{user.email}</span>
               <button
                 onClick={onLogout}
                 className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg font-medium transition-colors border border-zinc-700"
@@ -88,26 +80,13 @@ function Dashboard({ user, onLogout }) {
               className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 hover:border-zinc-700 transition-all cursor-pointer shadow-xl"
             >
               <div className="flex items-center justify-center w-16 h-16 bg-zinc-800 rounded-xl mb-6">
-                <svg
-                  className="w-8 h-8 text-blue-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
+                <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                Invoice Extractor
-              </h3>
+              <h3 className="text-xl font-bold text-white mb-2">Invoice Extractor</h3>
               <p className="text-gray-400 text-sm">
-                Extract and process invoice data from PDF files with AI-powered
-                analysis
+                Extract and process invoice data from PDF files with AI-powered analysis
               </p>
             </motion.div>
           </Link>
@@ -120,57 +99,13 @@ function Dashboard({ user, onLogout }) {
               className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 hover:border-zinc-700 transition-all cursor-pointer shadow-xl"
             >
               <div className="flex items-center justify-center w-16 h-16 bg-zinc-800 rounded-xl mb-6">
-                <svg
-                  className="w-8 h-8 text-green-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
+                <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                Unit Rate Explorer
-              </h3>
+              <h3 className="text-xl font-bold text-white mb-2">Unit Rate Explorer</h3>
               <p className="text-gray-400 text-sm">
-                Explore and analyze unit rates by province, city, year, and
-                month
-              </p>
-            </motion.div>
-          </Link>
-
-          {/* Claims Dashboard Tool */}
-          <Link to="/claims-dashboard">
-            <motion.div
-              whileHover={{ scale: 1.03, y: -5 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 hover:border-zinc-700 transition-all cursor-pointer shadow-xl"
-            >
-              <div className="flex items-center justify-center w-16 h-16 bg-zinc-800 rounded-xl mb-6">
-                <svg
-                  className="w-8 h-8 text-purple-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                Claims Dashboard
-              </h3>
-              <p className="text-gray-400 text-sm">
-                Manage claim files, deliverables, and team assignments
+                Explore and analyze unit rates by province, city, year, and month
               </p>
             </motion.div>
           </Link>
@@ -183,23 +118,11 @@ function Dashboard({ user, onLogout }) {
             className="bg-zinc-900 bg-opacity-50 border border-zinc-800 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center min-h-[200px]"
           >
             <div className="flex items-center justify-center w-16 h-16 bg-zinc-800 bg-opacity-50 rounded-xl mb-4">
-              <svg
-                className="w-8 h-8 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
+              <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-500 mb-2">
-              Coming Soon
-            </h3>
+            <h3 className="text-lg font-semibold text-gray-500 mb-2">Coming Soon</h3>
             <p className="text-gray-600 text-sm text-center">
               More tools will be added here
             </p>
@@ -215,18 +138,8 @@ function Dashboard({ user, onLogout }) {
         >
           <div className="flex items-center gap-4">
             <div className="flex items-center justify-center w-12 h-12 bg-zinc-800 rounded-xl">
-              <svg
-                className="w-6 h-6 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
+              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
             <div>

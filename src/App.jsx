@@ -6,7 +6,6 @@ import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import InvoiceExtractor from './pages/InvoiceExtractor';
 import UnitRateExtractor from './pages/UnitRateExtractor';
-import ClaimsDashboardApp from './claims-dashboard/ClaimsDashboardApp.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -14,13 +13,14 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-useEffect(() => {
-  if (location.pathname === '/auth/callback') {
-    setLoading(false);
-    return;
-  }
-  checkAuth();
-}, [location.pathname]);
+  useEffect(() => {
+    // Don't check auth on callback page - let AuthCallback handle it
+    if (location.pathname === '/auth/callback') {
+      setLoading(false);
+      return;
+    }
+    checkAuth();
+  }, [location.pathname]);
 
   const checkAuth = async () => {
     try {
@@ -89,10 +89,6 @@ useEffect(() => {
       <Route 
         path="/unitrateextractor" 
         element={user ? <UnitRateExtractor /> : <Navigate to="/login" />} 
-      />
-      <Route 
-        path="/claims-dashboard" 
-        element={user ? <ClaimsDashboardApp loggedInUser={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
       />
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
     </Routes>
