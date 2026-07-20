@@ -159,11 +159,11 @@ function InvoiceExtractor({ user, onLogout }) {
   const [freshCustomRules, setFreshCustomRules] = useState([]);
 
   const [extractionPrompt, setExtractionPrompt] = useState(DEFAULT_EXTRACTION_PROMPT);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.1-flash-lite');
   const [availableModels, setAvailableModels] = useState([
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient (Current)' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower processing' },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1-Flash', description: 'Fast and efficient (Current)' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', description: 'Faster with improved accuracy' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', description: 'Most accurate, slower processing' },
     { value: 'claude-opus-4-8', label: 'Claude Opus 4', description: 'Highest accuracy, slower processing' },
     { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4', description: 'Balanced speed and accuracy' },
     { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4', description: 'Fastest Claude model' },
@@ -364,7 +364,7 @@ function InvoiceExtractor({ user, onLogout }) {
     setConversionStatus({ conversionComplete: false, allConverted: false });
     // Reset prompt to default
     setExtractionPrompt(DEFAULT_EXTRACTION_PROMPT);
-    setSelectedModel('gemini-2.0-flash');
+    setSelectedModel('gemini-3.1-flash-lite');
   };
 
   // Load available models on component mount

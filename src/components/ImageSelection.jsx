@@ -213,9 +213,9 @@ function ImageSelection({
   }, [navigateImage]);
 
   const modelOptions = [
-    { group: 'Google Gemini', value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', description: 'Fast and efficient' },
-    { group: 'Google Gemini', value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Faster with improved accuracy' },
-    { group: 'Google Gemini', value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most accurate, slower' },
+    { group: 'Google Gemini', value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1-Flash', description: 'Fast and efficient' },
+    { group: 'Google Gemini', value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', description: 'Faster with improved accuracy' },
+    { group: 'Google Gemini', value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', description: 'Most accurate, slower' },
     { group: 'Anthropic Claude', value: 'claude-opus-4-8', label: 'Claude Opus 4', description: 'Highest accuracy, slower' },
     { group: 'Anthropic Claude', value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4', description: 'Balanced speed and accuracy' },
     { group: 'Anthropic Claude', value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4', description: 'Fastest Claude model' },

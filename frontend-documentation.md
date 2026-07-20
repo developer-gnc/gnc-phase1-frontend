@@ -126,7 +126,7 @@ const [loading, setLoading] = useState(true);
 const [images, setImages] = useState([]);
 const [processing, setProcessing] = useState(false);
 const [currentStep, setCurrentStep] = useState('upload');
-const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash');
+const [selectedModel, setSelectedModel] = useState('gemini-3.1-flash-lite');
 const [customPrompt, setCustomPrompt] = useState('');
 const [collectedResult, setCollectedResult] = useState({
   labour: [],

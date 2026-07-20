@@ -21,9 +21,9 @@ The Invoice Extractor automatically reads invoice images and converts them into 
 ### Step 2: Choose Settings
 
 **AI Model Selection:**
-- **Gemini 2.0 Flash** (Default) - Fast and accurate
-- **Gemini 2.5 Flash** - Faster with better accuracy
-- **Gemini 2.5 Pro** - Best accuracy for complex documents
+- **Gemini 3.1-Flash** (Default) - Fast and accurate
+- **Gemini 3.5 Flash** - Faster with better accuracy
+- **Gemini 3.1 Pro** - Best accuracy for complex documents
 
 **Add Instructions:**
 - Tell the system what information to extract
