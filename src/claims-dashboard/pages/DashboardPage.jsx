@@ -92,9 +92,6 @@ export default function DashboardPage({ claims, deliverables, currentRole, curre
         <div className="page-actions">
           {!isJr && (
             <>
-              <button className="btn btn-ghost btn-sm">
-                <svg width="12" height="12"><use href="#icon-download" /></svg> Export
-              </button>
               <button className="btn btn-primary btn-sm" onClick={onOpenNewClaim}>
                 <svg width="12" height="12"><use href="#icon-plus" /></svg> New Claim File
               </button>
