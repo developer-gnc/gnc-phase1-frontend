@@ -20,14 +20,8 @@ function StatCard({ color, iconId, trend, trendClass, target, label, onClick }) 
   );
 }
 
-function KanbanCard({ claim, deliverables, progress, onClick }) {
-  const cfg = STATUS_CONFIG[claim.status] || STATUS_CONFIG['Not Started'];
-  const openDels = deliverables.filter(d => d.claimId === claim.id && d.status !== 'Completed').length;
-  const [barWidth, setBarWidth] = useState('0%');
-  useEffect(() => {
-    const t = setTimeout(() => setBarWidth(progress + '%'), 300);
-    return () => clearTimeout(t);
-  }, [progress]);
+function KanbanCard({ claim, deliverables, onClick }) {
+  const openDels = deliverables.filter(d => d.claim_id === claim.id && d.status !== 'Completed').length;
   return (
     <div className="kanban-card" onClick={onClick}>
       <div className="kanban-card-title">
@@ -40,10 +34,12 @@ function KanbanCard({ claim, deliverables, progress, onClick }) {
       </div>
       <div className="kanban-card-meta">
         <span className="kanban-card-gnc">GNC #{claim.gnc}</span>
-        <div className="kanban-consultant">
-          <div className="avatar-xs" style={{ background: claim.consultantColor }}>{claim.consultantInitials}</div>
-          <span>{claim.consultant.split(' ')[0]}</span>
-        </div>
+        {claim.consultant && (
+          <div className="kanban-consultant">
+            <div className="avatar-xs" style={{ background: claim.consultant_color }}>{claim.consultant_initials}</div>
+            <span>{claim.consultant.split(' ')[0]}</span>
+          </div>
+        )}
       </div>
       {openDels > 0 && (
         <div style={{ marginTop: 5 }}>
@@ -52,35 +48,29 @@ function KanbanCard({ claim, deliverables, progress, onClick }) {
           </span>
         </div>
       )}
-      <div className="kanban-progress-wrap">
-        <div className="kanban-progress-track">
-          <div className="kanban-progress-fill" style={{ width: barWidth, background: cfg.progressColor }}></div>
-        </div>
-        <div className="kanban-progress-label">{progress}% complete</div>
-      </div>
     </div>
   );
 }
 
-export default function DashboardPage({ claims, deliverables, currentRole, currentUserId, getClaimProgress, onClaimClick, onNavigate, onOpenNewClaim }) {
+export default function DashboardPage({ claims, deliverables, currentRole, currentUserEmail, onClaimClick, onNavigate, onOpenNewClaim }) {
   const [dateStr, setDateStr] = useState('');
   useEffect(() => {
     setDateStr(new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
   }, []);
 
-  const isJr = currentRole === 'jr';
+  const isManager = currentRole === 'manager' || currentRole === 'director';
 
   const assignedClaimIds = new Set(
-    deliverables.filter(d => d.assigneeId === currentUserId).map(d => d.claimId)
+    deliverables.filter(d => d.assignee_email === currentUserEmail).map(d => d.claim_id)
   );
-  const visibleClaims = isJr
-    ? claims.filter(c => c.consultantId === currentUserId || assignedClaimIds.has(c.id))
-    : claims;
+  const visibleClaims = isManager
+    ? claims
+    : claims.filter(c => c.consultant_email === currentUserEmail || c.manager_email === currentUserEmail || assignedClaimIds.has(c.id));
 
   const active = visibleClaims.filter(c => c.status !== 'Completed').length;
   const completed = visibleClaims.filter(c => c.status === 'Completed').length;
   const pending = visibleClaims.filter(c => c.status === 'Pending Approval').length;
-  const openTasks = deliverables.filter(d => d.status !== 'Completed' && (isJr ? d.assigneeId === currentUserId : true)).length;
+  const openTasks = deliverables.filter(d => d.status !== 'Completed' && (isManager ? true : d.assignee_email === currentUserEmail)).length;
 
   return (
     <div>
@@ -90,13 +80,9 @@ export default function DashboardPage({ claims, deliverables, currentRole, curre
           <div className="page-subtitle">{dateStr}</div>
         </div>
         <div className="page-actions">
-          {!isJr && (
-            <>
-              <button className="btn btn-primary btn-sm" onClick={onOpenNewClaim}>
-                <svg width="12" height="12"><use href="#icon-plus" /></svg> New Claim File
-              </button>
-            </>
-          )}
+          <button className="btn btn-primary btn-sm" onClick={onOpenNewClaim}>
+            <svg width="12" height="12"><use href="#icon-plus" /></svg> New Claim File
+          </button>
         </div>
       </div>
 
@@ -104,7 +90,7 @@ export default function DashboardPage({ claims, deliverables, currentRole, curre
         <StatCard color="blue" iconId="icon-folder" trend="Total" trendClass="neutral" target={active} label="Active Claim Files" onClick={() => onNavigate('claims')} />
         <StatCard color="green" iconId="icon-check-circle" trend="↑ completed" trendClass="up" target={completed} label="Completed Files" />
         <StatCard color="yellow" iconId="icon-clock" trend="Needs review" trendClass="neutral" target={pending} label="Pending Approval" />
-        <StatCard color="red" iconId="icon-check-list" trend="Needs attention" trendClass="down" target={openTasks} label="Open Tasks" onClick={!isJr ? () => onNavigate('tasks') : undefined} />
+        <StatCard color="red" iconId="icon-check-list" trend="Needs attention" trendClass="down" target={openTasks} label="Open Tasks" onClick={() => onNavigate('tasks')} />
       </div>
 
       <div className="section-title">Live Status Board</div>
@@ -127,7 +113,6 @@ export default function DashboardPage({ claims, deliverables, currentRole, curre
                     key={c.id}
                     claim={c}
                     deliverables={deliverables}
-                    progress={getClaimProgress(c.id)}
                     onClick={() => onClaimClick(c)}
                   />
                 ))}

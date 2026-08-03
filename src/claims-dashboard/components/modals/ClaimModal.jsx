@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import ClaimHeader from "./ClaimHeader.jsx";
 import ClaimDeliverables from "./ClaimDeliverables.jsx";
 import AddDeliverableForm from "./AddDeliverableForm.jsx";
-import FullFileModal from "./FullFileModal.jsx";
+import FullClaimPage from "../../pages/FullClaimPage.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 
 const STATUSES = ['Not Started', 'In Progress', 'Pending Approval', 'On Hold', 'Completed'];
@@ -22,6 +22,8 @@ export default function ClaimModal({
   onDeleteClaim,
   onToggleFlag,
   onUpdateClaimStatus,
+  onUpdateClaim,
+  onOpenNewClaim,
 }) {
   const [newDelType, setNewDelType] = useState("Site Visit");
   const [newDelCustom, setNewDelCustom] = useState("");
@@ -44,8 +46,8 @@ export default function ClaimModal({
 
   if (!claim) return null;
 
-  const isManager = currentRole === "manager";
-  const isOwner = claim.consultant_email === currentUserEmail;
+  const isManager = currentRole === "manager" || currentRole === "director";
+  const isOwner = claim.consultant_email === currentUserEmail || claim.manager_email === currentUserEmail;
   const canManage = isManager || isOwner;
 
   const dels = deliverables.filter((d) => d.claim_id === claim.id);
@@ -66,18 +68,18 @@ export default function ClaimModal({
 
   if (showFullFile) {
     return (
-      <FullFileModal
+      <FullClaimPage
         claim={claim}
-        deliverables={dels}
-        getClaimProgress={getClaimProgress}
+        team={team}
         onBack={() => setShowFullFile(false)}
-        onClose={onClose}
+        onSaveClaim={onUpdateClaim}
+        onOpenNewClaim={onOpenNewClaim}
       />
     );
   }
 
   return (
-    <div className="modal-overlay show" onClick={(e) => { if (e.target.classList.contains("modal-overlay")) onClose(); }}>
+    <div className="modal-overlay show">
       <div className="modal">
         <ClaimHeader claim={claim} onClose={onClose} onOpenFullFile={() => setShowFullFile(true)} />
         <div className="modal-body">
@@ -98,20 +100,36 @@ export default function ClaimModal({
               )}
             </div>
 
+
             <div className="modal-field">
-              <div className="modal-field-label">Progress</div>
-              <div className="modal-field-value">{progress}%</div>
+              <div className="modal-field-label">Manager</div>
+              <div className="modal-field-value">
+                {claim.manager ? (
+                  <div className="consultant-cell">
+                    <div className="avatar-xs" style={{ background: claim.manager_color }}>
+                      {claim.manager_initials}
+                    </div>
+                    <span>{claim.manager}</span>
+                  </div>
+                ) : (
+                  <span style={{ color: 'var(--text3)' }}>—</span>
+                )}
+              </div>
             </div>
 
             <div className="modal-field">
-              <div className="modal-field-label">Lead Consultant</div>
+              <div className="modal-field-label">Consultant</div>
               <div className="modal-field-value">
-                <div className="consultant-cell">
-                  <div className="avatar-xs" style={{ background: claim.consultant_color }}>
-                    {claim.consultant_initials}
+                {claim.consultant ? (
+                  <div className="consultant-cell">
+                    <div className="avatar-xs" style={{ background: claim.consultant_color }}>
+                      {claim.consultant_initials}
+                    </div>
+                    <span>{claim.consultant}</span>
                   </div>
-                  <span>{claim.consultant}</span>
-                </div>
+                ) : (
+                  <span style={{ color: 'var(--text3)' }}>—</span>
+                )}
               </div>
             </div>
 
@@ -144,6 +162,17 @@ export default function ClaimModal({
                 )}
               </div>
             </div>
+
+            {claim.onedrive_link && (
+              <div className="modal-field">
+                <div className="modal-field-label">Documents</div>
+                <div className="modal-field-value">
+                  <a href={claim.onedrive_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                    Open OneDrive Folder →
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
 
           <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7, marginBottom: 18 }}>
@@ -153,8 +182,7 @@ export default function ClaimModal({
           <div className="modal-section-title">
             <span>Deliverables & Task Assignments</span>
             <span className="canada-time-badge">
-              <span className="canada-flag">🇨🇦</span>
-              Due dates in Canada (MDT)
+            Due dates in Canada Timezone (MDT)
             </span>
           </div>
 

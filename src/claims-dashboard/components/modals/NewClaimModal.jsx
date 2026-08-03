@@ -1,16 +1,22 @@
 import { useState } from "react";
 
 export default function NewClaimModal({ team, onClose, onSave }) {
+  const managers = team.filter(m => m.role === 'manager' || m.role === 'director');
+  const consultants = team.filter(m => m.role === 'consultant');
+
   const [name, setName] = useState("");
   const [gnc, setGnc] = useState("");
   const [claim, setClaim] = useState("");
   const [dol, setDol] = useState("");
-  const [consultantEmail, setConsultantEmail] = useState(team[0]?.email || "");
+  const [managerEmail, setManagerEmail] = useState(managers[0]?.email || "");
+  const [consultantEmail, setConsultantEmail] = useState(consultants[0]?.email || "");
   const [status, setStatus] = useState("Not Started");
   const [address, setAddress] = useState("");
-  const [progress, setProgress] = useState(0);
   const [description, setDescription] = useState("");
   const [errors, setErrors] = useState({});
+  const [typeOfLoss, setTypeOfLoss] = useState("Fire");
+  const [typeOfLossCustom, setTypeOfLossCustom] = useState("");
+  const [onedriveLink, setOnedriveLink] = useState("");
 
   function validate() {
     const e = {};
@@ -24,25 +30,33 @@ export default function NewClaimModal({ team, onClose, onSave }) {
   function handleSave() {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
-    const selectedMember = team.find((m) => m.email === consultantEmail);
+
+    const selectedManager = team.find((m) => m.email === managerEmail);
+    const selectedConsultant = team.find((m) => m.email === consultantEmail);
+
     onSave({
       name: name.trim(),
       gnc: gnc.trim(),
       claim: claim.trim(),
       date_of_loss: dol,
-      consultant_email: consultantEmail,
-      consultant: selectedMember?.name || "",
-      consultant_initials: selectedMember?.initials || "",
-      consultant_color: selectedMember?.color || "#8fa0c0",
+      manager_email: managerEmail || null,
+      manager: selectedManager?.name || "",
+      manager_initials: selectedManager?.initials || "",
+      manager_color: selectedManager?.color || "#8fa0c0",
+      consultant_email: consultantEmail || null,
+      consultant: selectedConsultant?.name || "",
+      consultant_initials: selectedConsultant?.initials || "",
+      consultant_color: selectedConsultant?.color || "#8fa0c0",
       status,
-      progress: parseInt(progress) || 0,
+      type_of_loss: typeOfLoss === "Other..." ? typeOfLossCustom.trim() : typeOfLoss,
       address: address.trim(),
       description: description.trim(),
+      onedrive_link: onedriveLink.trim(),
     });
   }
 
   return (
-    <div className="modal-overlay show" onClick={(e) => { if (e.target.classList.contains("modal-overlay")) onClose(); }}>
+    <div className="modal-overlay show">
       <div className="modal" style={{ width: 760 }}>
         <div className="modal-header">
           <div>
@@ -103,13 +117,26 @@ export default function NewClaimModal({ team, onClose, onSave }) {
 
           <div className="form-row">
             <div className="form-field">
-              <label className="form-label">Lead Consultant</label>
-              <select className="form-select" value={consultantEmail} onChange={(e) => setConsultantEmail(e.target.value)}>
-                {team.map((m) => (
+              <label className="form-label">GNC Assigned Manager</label>
+              <select className="form-select" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)}>
+                <option value="">— None —</option>
+                {managers.map((m) => (
                   <option key={m.email} value={m.email}>{m.name}</option>
                 ))}
               </select>
             </div>
+            <div className="form-field">
+              <label className="form-label">GNC Assigned Consultant</label>
+              <select className="form-select" value={consultantEmail} onChange={(e) => setConsultantEmail(e.target.value)}>
+                <option value="">— None —</option>
+                {consultants.map((m) => (
+                  <option key={m.email} value={m.email}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-row-3">
             <div className="form-field">
               <label className="form-label">Status</label>
               <select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -120,9 +147,31 @@ export default function NewClaimModal({ team, onClose, onSave }) {
                 <option value="Completed">Completed</option>
               </select>
             </div>
-          </div>
-
-          <div className="form-row">
+            <div className="form-field">
+              <label className="form-label">Type of Loss</label>
+              <select className="form-select" value={typeOfLoss} onChange={(e) => setTypeOfLoss(e.target.value)}>
+                <option value="Fire">Fire</option>
+                <option value="Water">Water</option>
+                <option value="Flood">Flood</option>
+                <option value="Wind">Wind</option>
+                <option value="Hail">Hail</option>
+                <option value="Wildfire">Wildfire</option>
+                <option value="Vandalism">Vandalism</option>
+                <option value="Structural">Structural</option>
+                <option value="Under-Deductible">Under-Deductible</option>
+                <option value="Pre-Loss Risk Assessment">Pre-Loss Risk Assessment</option>
+                <option value="Other...">Other...</option>
+              </select>
+              {typeOfLoss === "Other..." && (
+                <input
+                  className="form-input"
+                  placeholder="Specify type of loss..."
+                  value={typeOfLossCustom}
+                  onChange={(e) => setTypeOfLossCustom(e.target.value)}
+                  style={{ marginTop: 6 }}
+                />
+              )}
+            </div>
             <div className="form-field">
               <label className="form-label">Address</label>
               <input
@@ -132,15 +181,16 @@ export default function NewClaimModal({ team, onClose, onSave }) {
                 onChange={(e) => setAddress(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="form-row">
             <div className="form-field">
-              <label className="form-label">Progress (%)</label>
+              <label className="form-label">OneDrive Folder Link</label>
               <input
-                type="number"
                 className="form-input"
-                min={0}
-                max={100}
-                value={progress}
-                onChange={(e) => setProgress(e.target.value)}
+                placeholder="https://..."
+                value={onedriveLink}
+                onChange={(e) => setOnedriveLink(e.target.value)}
               />
             </div>
           </div>

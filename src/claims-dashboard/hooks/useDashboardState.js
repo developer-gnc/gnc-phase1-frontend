@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient.js";
+import { FAILSAFE_ADMIN_EMAIL } from "../constants/index.js";
 
 export function useDashboardState(loggedInUser) {
   const [team, setTeam] = useState([]);
@@ -34,11 +35,15 @@ export function useDashboardState(loggedInUser) {
     loadAll();
   }, []);
 
-  const currentUser = team.find(m => m.email === loggedInUser?.email);
+const currentUser = team.find(m => m.email === loggedInUser?.email);
 
-  useEffect(() => {
-    if (currentUser) setCurrentRole(currentUser.role);
-  }, [currentUser]);
+useEffect(() => {
+  if (loggedInUser?.email === FAILSAFE_ADMIN_EMAIL) {
+    setCurrentRole('director');
+  } else if (currentUser) {
+    setCurrentRole(currentUser.role);
+  }
+}, [currentUser, loggedInUser]);
 
   const taskBadgeCount = deliverables.filter(
     (d) => d.assignee_email === loggedInUser?.email && d.status !== "Completed"
@@ -175,6 +180,17 @@ export function useDashboardState(loggedInUser) {
     setTeam((prev) => prev.map((m) => m.email === email ? { ...m, role: newRole } : m));
   }
 
+  async function handleUpdateClaim(claimId, updatedFields) {
+  const timestamp = getTimestamp();
+  const payload = { ...updatedFields, last_updated: timestamp };
+
+  const { error } = await supabase.from('claims').update(payload).eq('id', claimId);
+  if (error) { console.error('Failed to update claim:', error); return; }
+
+  setClaims((prev) => prev.map((c) => c.id === claimId ? { ...c, ...payload } : c));
+  setModalClaim((prev) => prev && prev.id === claimId ? { ...prev, ...payload } : prev);
+}
+
   return {
     loading,
     currentRole,
@@ -198,5 +214,6 @@ export function useDashboardState(loggedInUser) {
     handleDeleteDeliverable,
     handleCycleStatus,
     handleRoleChangeAdmin,
+    handleUpdateClaim,
   };
 }

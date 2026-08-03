@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { TEAM } from '../data/index.js';
 import DeliverableItem from '../components/shared/DeliverableItem.jsx';
 
-export default function AllTasksPage({ claims, deliverables, currentRole, currentUserId, onCycleStatus, onDelete }) {
+export default function AllTasksPage({ claims, deliverables, team, currentRole, currentUserEmail, onCycleStatus, onUpdateDeliverable, onDelete }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [personFilter, setPersonFilter] = useState('all');
   const [claimFilter, setClaimFilter] = useState('all');
 
-  // If the currently selected claim was deleted, reset the filter
   useEffect(() => {
     if (claimFilter !== 'all') {
       const stillExists = claims.some(c => c.id === parseInt(claimFilter));
@@ -20,24 +18,23 @@ export default function AllTasksPage({ claims, deliverables, currentRole, curren
   const pending = deliverables.filter(d => d.status === 'Not Started' || d.status === 'Pending Approval').length;
   const done = deliverables.filter(d => d.status === 'Completed').length;
 
-  // Only show claims that have at least one deliverable
   const claimsWithDeliverables = claims.filter(c =>
-    deliverables.some(d => d.claimId === c.id)
+    deliverables.some(d => d.claim_id === c.id)
   );
 
   let filtered = [...deliverables];
   if (search) filtered = filtered.filter(d => {
-    const claim = claims.find(c => c.id === d.claimId);
+    const claim = claims.find(c => c.id === d.claim_id);
     return d.name.toLowerCase().includes(search) || (claim?.name.toLowerCase().includes(search));
   });
   if (statusFilter !== 'all') filtered = filtered.filter(d => d.status === statusFilter);
-  if (personFilter !== 'all') filtered = filtered.filter(d => d.assigneeId === personFilter);
-  if (claimFilter !== 'all') filtered = filtered.filter(d => d.claimId === parseInt(claimFilter));
+  if (personFilter !== 'all') filtered = filtered.filter(d => d.assignee_email === personFilter);
+  if (claimFilter !== 'all') filtered = filtered.filter(d => d.claim_id === parseInt(claimFilter));
 
   const priorityOrder = { High: 0, Medium: 1, Low: 2 };
   filtered = filtered.sort((a, b) => (priorityOrder[a.priority] || 1) - (priorityOrder[b.priority] || 1));
 
-  const canEdit = currentRole === 'admin' || currentRole === 'sr';
+  const canEdit = currentRole === 'manager' || currentRole === 'director';
 
   return (
     <div>
@@ -56,21 +53,21 @@ export default function AllTasksPage({ claims, deliverables, currentRole, curren
           <div><div className="task-stat-num">{pending}</div><div className="task-stat-lbl">Pending / Approval</div></div>
         </div>
         <div className="task-stat">
-          <div className="task-stat-icon" style={{ background: 'rgba(30,86,217,0.09)', color: 'var(--accent)' }}>
+          <div className="task-stat-icon" style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent)' }}>
             <svg><use href="#icon-check-list" /></svg>
           </div>
           <div><div className="task-stat-num">{open}</div><div className="task-stat-lbl">Open Deliverables</div></div>
         </div>
         <div className="task-stat">
-          <div className="task-stat-icon" style={{ background: 'rgba(0,201,167,0.09)', color: 'var(--accent2)' }}>
+          <div className="task-stat-icon" style={{ background: 'rgba(74,222,128,0.1)', color: 'var(--accent2)' }}>
             <svg><use href="#icon-check-circle" /></svg>
           </div>
           <div><div className="task-stat-num">{done}</div><div className="task-stat-lbl">Completed</div></div>
         </div>
       </div>
 
-      <div className="tasks-toolbar">
-        <div className="search-wrap">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div className="search-wrap" style={{ maxWidth: 300 }}>
           <span className="search-icon"><svg><use href="#icon-search" /></svg></span>
           <input
             type="text"
@@ -89,7 +86,7 @@ export default function AllTasksPage({ claims, deliverables, currentRole, curren
         </select>
         <select className="filter-select" onChange={e => setPersonFilter(e.target.value)}>
           <option value="all">All Consultants</option>
-          {TEAM.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          {(team || []).map(m => <option key={m.email} value={m.email}>{m.name}</option>)}
         </select>
         <select className="filter-select" value={claimFilter} onChange={e => setClaimFilter(e.target.value)}>
           <option value="all">All Claims</option>
@@ -99,7 +96,7 @@ export default function AllTasksPage({ claims, deliverables, currentRole, curren
         </select>
       </div>
 
-      <div className="task-list">
+      <div>
         {filtered.length === 0 ? (
           <div className="empty-state">
             <svg><use href="#icon-check-list" /></svg>
@@ -109,10 +106,13 @@ export default function AllTasksPage({ claims, deliverables, currentRole, curren
           <DeliverableItem
             key={d.id}
             deliverable={d}
+            claims={claims}
+            team={team}
             showClaim={true}
             canEdit={canEdit}
-            currentUserId={currentUserId}
+            currentUserEmail={currentUserEmail}
             onCycleStatus={onCycleStatus}
+            onUpdateDeliverable={onUpdateDeliverable}
             onDelete={onDelete}
           />
         ))}
