@@ -16,7 +16,7 @@ export default function Sidebar({ activePage, onNavigate, currentRole, taskBadge
           <svg><use href="#icon-users" /></svg>
         </div>
       )}
-      {currentRole === 'manager' && (
+      {(currentRole === 'manager' || currentRole === 'director') && (
         <div className={`sidebar-icon ${activePage === 'admin' ? 'active' : ''}`} title="Admin" onClick={() => onNavigate('admin')}>
           <svg><use href="#icon-shield" /></svg>
         </div>

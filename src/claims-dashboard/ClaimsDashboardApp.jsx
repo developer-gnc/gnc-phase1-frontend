@@ -3,7 +3,6 @@ import { useDashboardState } from './hooks/useDashboardState.js';
 
 import Icons from './components/shared/Icons.jsx';
 import TopNav from './components/layout/TopNav.jsx';
-import Header from './components/layout/Header.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import ClaimModal from './components/modals/ClaimModal.jsx';
 import NewClaimModal from './components/modals/NewClaimModal.jsx';
@@ -34,6 +33,7 @@ export default function App({ loggedInUser, onLogout }) {
     handleDeleteClaim,
     handleToggleFlag,
     handleUpdateClaimStatus,
+    handleUpdateClaim,
     handleAddDeliverable,
     handleUpdateDeliverable,
     handleDeleteDeliverable,
@@ -41,9 +41,9 @@ export default function App({ loggedInUser, onLogout }) {
     handleRoleChangeAdmin,
   } = useDashboardState(loggedInUser);
 
-  const isManager = currentRole === 'manager';
+  const isManager = currentRole === 'manager' || currentRole === 'director';
   const currentUserEmail = loggedInUser?.email;
-  const pageProps = { deliverables, currentRole, currentUserEmail, onCycleStatus: handleCycleStatus };
+  const pageProps = { deliverables, claims, currentRole, currentUser, currentUserEmail, team, onCycleStatus: handleCycleStatus, onUpdateDeliverable: handleUpdateDeliverable };
 
   function getClaimProgress(claimId) {
     const dels = deliverables.filter(d => d.claim_id === claimId);
@@ -55,8 +55,7 @@ export default function App({ loggedInUser, onLogout }) {
   return (
     <>
       <Icons />
-      <TopNav loggedInUser={loggedInUser} onLogout={onLogout} />
-      <Header currentRole={currentRole} />
+      <TopNav loggedInUser={loggedInUser} onLogout={onLogout} currentRole={currentRole} />
       <div className="layout">
         <Sidebar
           activePage={activePage}
@@ -71,8 +70,6 @@ export default function App({ loggedInUser, onLogout }) {
               deliverables={deliverables}
               currentRole={currentRole}
               currentUserEmail={currentUserEmail}
-              team={team}
-              getClaimProgress={getClaimProgress}
               onClaimClick={setModalClaim}
               onNavigate={setActivePage}
               onOpenNewClaim={() => setShowNewClaimModal(true)}
@@ -84,7 +81,6 @@ export default function App({ loggedInUser, onLogout }) {
               deliverables={deliverables}
               currentRole={currentRole}
               currentUserEmail={currentUserEmail}
-              getClaimProgress={getClaimProgress}
               onClaimClick={setModalClaim}
               onOpenNewClaim={() => setShowNewClaimModal(true)}
             />
@@ -115,6 +111,7 @@ export default function App({ loggedInUser, onLogout }) {
           onDeleteClaim={handleDeleteClaim}
           onToggleFlag={handleToggleFlag}
           onUpdateClaimStatus={handleUpdateClaimStatus}
+          onUpdateClaim={handleUpdateClaim}
         />
       )}
 

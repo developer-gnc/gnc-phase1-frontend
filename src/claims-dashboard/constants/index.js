@@ -1,4 +1,5 @@
 export const ROLES = {
+  DIRECTOR: 'director',
   MANAGER: 'manager',
   CONSULTANT: 'consultant',
 };
@@ -18,8 +19,11 @@ export const STATUS_CYCLE = [
   'Completed',
 ];
 
-// No more per-permission toggles, behavior is now just Manager vs Consultant.
-// Kept as a helper in case any file still checks permissions directly.
+// Hardcoded failsafe — this account ALWAYS has full Director-level access,
+// regardless of what's in the Supabase team table. Protects against
+// getting locked out if the team table is ever misconfigured or emptied.
+export const FAILSAFE_ADMIN_EMAIL = 'database@gncgroup.ca';
+
 export function canEditClaim(role, isOwnFile) {
-  return role === ROLES.MANAGER || isOwnFile;
+  return role === ROLES.DIRECTOR || role === ROLES.MANAGER || isOwnFile;
 }

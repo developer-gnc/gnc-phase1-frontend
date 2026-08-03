@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 
-export default function TopNav({ loggedInUser, onLogout }) {
+export default function TopNav({ loggedInUser, onLogout, currentRole }) {
+  const roleLabel = currentRole === 'director' ? 'Director' : currentRole === 'manager' ? 'Manager' : 'Consultant';
+  const roleBadgeClass = currentRole === 'director' ? 'role-badge-director' : currentRole === 'manager' ? 'role-badge-manager' : 'role-badge-consultant';
+
   return (
     <nav className="bg-black border-b border-zinc-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -27,6 +30,7 @@ export default function TopNav({ loggedInUser, onLogout }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {currentRole && <span className={`role-badge ${roleBadgeClass}`}>{roleLabel}</span>}
             <span className="text-sm text-gray-400 hidden sm:block">{loggedInUser?.email}</span>
             <button
               onClick={onLogout}

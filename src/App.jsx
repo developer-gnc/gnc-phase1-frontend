@@ -22,6 +22,7 @@ useEffect(() => {
   checkAuth();
 }, [location.pathname]);
 
+
   const checkAuth = async () => {
     try {
       const token = localStorage.getItem('authToken');
