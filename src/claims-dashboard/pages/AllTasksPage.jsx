@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import DeliverableItem from '../components/shared/DeliverableItem.jsx';
+import Dropdown from "../components/shared/Dropdown.jsx";
 
 export default function AllTasksPage({ claims, deliverables, team, currentRole, currentUserEmail, onCycleStatus, onUpdateDeliverable, onDelete }) {
   const [search, setSearch] = useState('');
@@ -76,24 +77,34 @@ export default function AllTasksPage({ claims, deliverables, team, currentRole, 
             onChange={e => setSearch(e.target.value.toLowerCase())}
           />
         </div>
-        <select className="filter-select" onChange={e => setStatusFilter(e.target.value)}>
-          <option value="all">All Statuses</option>
-          <option value="Not Started">Not Started</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Pending Approval">Pending Approval</option>
-          <option value="Completed">Completed</option>
-          <option value="On Hold">On Hold</option>
-        </select>
-        <select className="filter-select" onChange={e => setPersonFilter(e.target.value)}>
-          <option value="all">All Consultants</option>
-          {(team || []).map(m => <option key={m.email} value={m.email}>{m.name}</option>)}
-        </select>
-        <select className="filter-select" value={claimFilter} onChange={e => setClaimFilter(e.target.value)}>
-          <option value="all">All Claims</option>
-          {claimsWithDeliverables.map(c => (
-            <option key={c.id} value={c.id}>GNC #{c.gnc} · {c.name}</option>
-          ))}
-        </select>
+        <div style={{ minWidth: 160 }}>
+          <Dropdown
+            value={statusFilter}
+            options={[
+              { value: "all", label: "All Statuses" },
+              { value: "Not Started", label: "Not Started" },
+              { value: "In Progress", label: "In Progress" },
+              { value: "Pending Approval", label: "Pending Approval" },
+              { value: "Completed", label: "Completed" },
+              { value: "On Hold", label: "On Hold" },
+            ]}
+            onChange={setStatusFilter}
+          />
+        </div>
+        <div style={{ minWidth: 170 }}>
+          <Dropdown
+            value={personFilter}
+            options={[{ value: "all", label: "All Consultants" }, ...(team || []).map(m => ({ value: m.email, label: m.name }))]}
+            onChange={setPersonFilter}
+          />
+        </div>
+        <div style={{ minWidth: 200 }}>
+          <Dropdown
+            value={claimFilter}
+            options={[{ value: "all", label: "All Claims" }, ...claimsWithDeliverables.map(c => ({ value: String(c.id), label: `GNC #${c.gnc} · ${c.name}` }))]}
+            onChange={setClaimFilter}
+          />
+        </div>
       </div>
 
       <div>

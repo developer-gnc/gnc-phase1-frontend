@@ -39,6 +39,7 @@ export default function App({ loggedInUser, onLogout }) {
     handleDeleteDeliverable,
     handleCycleStatus,
     handleRoleChangeAdmin,
+    handleOperationsToggleAdmin,
   } = useDashboardState(loggedInUser);
 
   const isManager = currentRole === 'manager' || currentRole === 'director';
@@ -90,7 +91,7 @@ export default function App({ loggedInUser, onLogout }) {
             <AllTasksPage {...pageProps} claims={claims} onDelete={handleDeleteDeliverable} />
           )}
           {activePage === 'admin' && (
-            <AdminPage team={team} onRoleChange={handleRoleChangeAdmin} />
+            <AdminPage team={team} onRoleChange={handleRoleChangeAdmin} onOperationsToggle={handleOperationsToggleAdmin} />
           )}
           {activePage === 'reports' && <ReportsPage />}
         </div>
