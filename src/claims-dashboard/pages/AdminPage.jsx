@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import Dropdown from "../components/shared/Dropdown.jsx";
 
-export default function AdminPage({ team, onRoleChange }) {
+export default function AdminPage({ team, onRoleChange, onOperationsToggle }) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
@@ -53,11 +54,12 @@ export default function AdminPage({ team, onRoleChange }) {
         borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow)'
       }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 220px',
+          display: 'grid', gridTemplateColumns: '1fr 220px 160px', gap: 24,
           padding: '14px 24px', borderBottom: '1px solid var(--border)'
         }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Member</span>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Role</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Operations</span>
         </div>
 
         {members.length === 0 ? (
@@ -70,7 +72,7 @@ export default function AdminPage({ team, onRoleChange }) {
             <div
               key={m.email}
               style={{
-                display: 'grid', gridTemplateColumns: '1fr 220px', alignItems: 'center',
+                display: 'grid', gridTemplateColumns: '1fr 220px 160px', alignItems: 'center', gap: 24,
                 padding: '16px 24px',
                 borderBottom: i === members.length - 1 ? 'none' : '1px solid var(--border)',
                 transition: 'background 0.12s',
@@ -98,19 +100,27 @@ export default function AdminPage({ team, onRoleChange }) {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
-                <select
-                  value={m.role}
-                  onChange={e => onRoleChange(m.email, e.target.value)}
-                  style={{
-                    background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: 8,
-                    color: 'var(--text)', fontSize: 12.5, fontFamily: 'var(--font)',
-                    padding: '7px 10px', outline: 'none', cursor: 'pointer', flex: 1, minWidth: 130
-                  }}
-                >
-                  <option value="director">Director</option>
-                  <option value="manager">Manager</option>
-                  <option value="consultant">Consultant</option>
-                </select>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <Dropdown
+                    value={m.role}
+                    options={[{ value: "director", label: "Director" }, { value: "manager", label: "Manager" }, { value: "consultant", label: "Consultant" }]}
+                    onChange={(val) => onRoleChange(m.email, val)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label className="toggle-wrap" title={m.is_operations ? 'Eligible for calling tasks' : 'Not eligible for calling tasks'}>
+                  <input
+                    type="checkbox"
+                    checked={!!m.is_operations}
+                    onChange={e => onOperationsToggle(m.email, e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  {m.is_operations ? 'Yes' : 'No'}
+                </span>
               </div>
             </div>
           );

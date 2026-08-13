@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { STATUS_CONFIG } from '../data/index.js';
+import Dropdown from "../components/shared/Dropdown.jsx";
 
 export default function ClaimsPage({ claims, deliverables, currentRole, currentUserEmail, onClaimClick, onOpenNewClaim }) {
   const [search, setSearch] = useState('');
@@ -56,18 +57,27 @@ export default function ClaimsPage({ claims, deliverables, currentRole, currentU
             <input type="text" className="search-input" placeholder="Search name, claim #, GNC #..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="filter-group">
-            <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="all">All Statuses</option>
-              <option value="Not Started">Not Started</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Pending Approval">Pending Approval</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-            </select>
-            <select className="filter-select" value={consultantFilter} onChange={e => setConsultantFilter(e.target.value)}>
-              <option value="all">All Consultants</option>
-              {consultants.map(name => <option key={name} value={name}>{name}</option>)}
-            </select>
+            <div style={{ minWidth: 160 }}>
+              <Dropdown
+                value={statusFilter}
+                options={[
+                  { value: "all", label: "All Statuses" },
+                  { value: "Not Started", label: "Not Started" },
+                  { value: "In Progress", label: "In Progress" },
+                  { value: "Pending Approval", label: "Pending Approval" },
+                  { value: "On Hold", label: "On Hold" },
+                  { value: "Completed", label: "Completed" },
+                ]}
+                onChange={setStatusFilter}
+              />
+            </div>
+            <div style={{ minWidth: 170 }}>
+              <Dropdown
+                value={consultantFilter}
+                options={[{ value: "all", label: "All Consultants" }, ...consultants.map(name => ({ value: name, label: name }))]}
+                onChange={setConsultantFilter}
+              />
+            </div>
             <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setStatusFilter('all'); setConsultantFilter('all'); }}>Clear</button>
           </div>
         </div>
@@ -76,12 +86,12 @@ export default function ClaimsPage({ claims, deliverables, currentRole, currentU
             <thead>
               <tr>
                 <th>File / Insured</th><th>GNC #</th><th>Claim #</th><th>Consultant</th>
-                <th>Status</th><th>Deliverables</th><th>Updated</th>
+                <th>Status</th><th>Deliverables</th><th>Progress</th><th>Updated</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: 28, color: 'var(--text3)' }}>No claims match your filters.</td></tr>
+                <tr><td colSpan="8" style={{ textAlign: 'center', padding: 28, color: 'var(--text3)' }}>No claims match your filters.</td></tr>
               ) : filtered.map(c => {
                 const cfg = STATUS_CONFIG[c.status] || STATUS_CONFIG['Not Started'];
                 const dels = deliverables.filter(d => d.claim_id === c.id);
@@ -116,6 +126,18 @@ export default function ClaimsPage({ claims, deliverables, currentRole, currentU
                         : dels.length > 0
                           ? <span className="status-pill pill-green" style={{ fontSize: 10 }}><span className="dot"></span>All done</span>
                           : <span style={{ color: 'var(--text3)', fontSize: 11 }}>—</span>}
+                    </td>
+                    <td>
+                      {dels.length > 0 ? (
+                        <div className="table-progress">
+                          <div className="table-progress-track">
+                            <div className="table-progress-fill" style={{ width: `${Math.round((dels.filter(d => d.status === 'Completed').length / dels.length) * 100)}%`, background: 'var(--accent)' }} />
+                          </div>
+                          <span className="table-progress-pct">{Math.round((dels.filter(d => d.status === 'Completed').length / dels.length) * 100)}%</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>—</span>
+                      )}
                     </td>
                     <td style={{ color: 'var(--text2)', fontSize: 11 }}>{c.last_updated}</td>
                   </tr>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Dropdown from "../shared/Dropdown.jsx";
 
 export default function NewClaimModal({ team, onClose, onSave }) {
   const managers = team.filter(m => m.role === 'manager' || m.role === 'director');
@@ -118,50 +119,40 @@ export default function NewClaimModal({ team, onClose, onSave }) {
           <div className="form-row">
             <div className="form-field">
               <label className="form-label">GNC Assigned Manager</label>
-              <select className="form-select" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)}>
-                <option value="">— None —</option>
-                {managers.map((m) => (
-                  <option key={m.email} value={m.email}>{m.name}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={managerEmail}
+                placeholder="— None —"
+                options={managers.map((m) => ({ value: m.email, label: m.name }))}
+                onChange={setManagerEmail}
+              />
             </div>
             <div className="form-field">
               <label className="form-label">GNC Assigned Consultant</label>
-              <select className="form-select" value={consultantEmail} onChange={(e) => setConsultantEmail(e.target.value)}>
-                <option value="">— None —</option>
-                {consultants.map((m) => (
-                  <option key={m.email} value={m.email}>{m.name}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={consultantEmail}
+                placeholder="— None —"
+                options={consultants.map((m) => ({ value: m.email, label: m.name }))}
+                onChange={setConsultantEmail}
+              />
             </div>
           </div>
 
           <div className="form-row-3">
             <div className="form-field">
               <label className="form-label">Status</label>
-              <select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="Not Started">Not Started</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Pending Approval">Pending Approval</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Completed">Completed</option>
-              </select>
+              <Dropdown
+                value={status}
+                options={["Not Started", "In Progress", "Pending Approval", "On Hold", "Completed"].map(s => ({ value: s, label: s }))}
+                onChange={setStatus}
+              />
             </div>
             <div className="form-field">
               <label className="form-label">Type of Loss</label>
-              <select className="form-select" value={typeOfLoss} onChange={(e) => setTypeOfLoss(e.target.value)}>
-                <option value="Fire">Fire</option>
-                <option value="Water">Water</option>
-                <option value="Flood">Flood</option>
-                <option value="Wind">Wind</option>
-                <option value="Hail">Hail</option>
-                <option value="Wildfire">Wildfire</option>
-                <option value="Vandalism">Vandalism</option>
-                <option value="Structural">Structural</option>
-                <option value="Under-Deductible">Under-Deductible</option>
-                <option value="Pre-Loss Risk Assessment">Pre-Loss Risk Assessment</option>
-                <option value="Other...">Other...</option>
-              </select>
+              <Dropdown
+                value={typeOfLoss}
+                options={["Fire", "Water", "Flood", "Wind", "Hail", "Wildfire", "Vandalism", "Structural", "Under-Deductible", "Pre-Loss Risk Assessment", "Other..."].map(t => ({ value: t, label: t }))}
+                onChange={setTypeOfLoss}
+              />
               {typeOfLoss === "Other..." && (
                 <input
                   className="form-input"

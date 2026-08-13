@@ -1,3 +1,5 @@
+import Dropdown from "../shared/Dropdown.jsx";
+
 export default function AddDeliverableForm({
   team,
   deliverableTypes,
@@ -15,18 +17,13 @@ export default function AddDeliverableForm({
 }) {
   return (
     <div className="add-del-row">
-      <select
-        className="add-del-select"
-        style={{ flex: "1.2" }}
-        value={newDelType}
-        onChange={(e) => setNewDelType(e.target.value)}
-      >
-        {(deliverableTypes || []).map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
+      <div style={{ flex: "1.2" }}>
+        <Dropdown
+          value={newDelType}
+          options={(deliverableTypes || []).map((t) => ({ value: t, label: t }))}
+          onChange={setNewDelType}
+        />
+      </div>
       {newDelType === "Custom..." && (
         <input
           type="text"
@@ -37,28 +34,20 @@ export default function AddDeliverableForm({
           style={{ flex: "1.2" }}
         />
       )}
-      <select
-        className="add-del-select"
-        value={newDelAssignee}
-        onChange={(e) => setNewDelAssignee(e.target.value)}
-      >
-        {(team || []).map((m) => (
-          <option key={m.email} value={m.email}>
-            {m.name}
-          </option>
-        ))}
-      </select>
-      <select
-        className="add-del-select"
-        value={newDelStatus}
-        onChange={(e) => setNewDelStatus(e.target.value)}
-      >
-        {["Not Started", "In Progress", "Pending Approval", "On Hold", "Completed"].map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+      <div style={{ flex: 1 }}>
+        <Dropdown
+          value={newDelAssignee}
+          options={(team || []).map((m) => ({ value: m.email, label: m.name }))}
+          onChange={setNewDelAssignee}
+        />
+      </div>
+      <div style={{ flex: 1 }}>
+        <Dropdown
+          value={newDelStatus}
+          options={["Not Started", "In Progress", "Pending Approval", "On Hold", "Completed"].map((s) => ({ value: s, label: s }))}
+          onChange={setNewDelStatus}
+        />
+      </div>
       <input
         type="date"
         className="add-del-input"

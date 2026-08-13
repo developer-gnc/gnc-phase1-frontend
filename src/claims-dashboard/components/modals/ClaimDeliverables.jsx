@@ -1,5 +1,7 @@
 import { getDueInfo } from "../../utils/index.js";
 import { StatusPill, PriorityBadge } from "../shared/StatusPill.jsx";
+import Dropdown from "../shared/Dropdown.jsx";
+
 
 const STATUS_OPTIONS = [
   "Not Started",
@@ -58,11 +60,11 @@ export default function ClaimDeliverables({
   onDeleteDeliverable,
 }) {
   const TEAM_BY_EMAIL = Object.fromEntries((team || []).map((m) => [m.email, m]));
-  const isManager = currentRole === "manager";
+  const isManager = currentRole === "manager" || currentRole === "director";
 
   if (!deliverables || deliverables.length === 0) {
     return (
-      <div className="table-card" style={{ marginBottom: 10 }}>
+      <div className="table-card" style={{ marginBottom: 10, overflow: "visible" }}>
         <table className="deliverables-table">
           <thead>
             <tr>
@@ -101,30 +103,22 @@ export default function ClaimDeliverables({
                 <DeliverableNameCell name={deliverable.name} note={deliverable.note} />
                 {canManageThisRow && isManager ? (
                   <td>
-                    <select
-                      className="del-assignee-sel"
+                    <Dropdown
                       value={deliverable.assignee_email || ""}
-                      onChange={(e) => onUpdateDeliverable(deliverable.id, "assignee_email", e.target.value)}
-                    >
-                      {(team || []).map((member) => (
-                        <option key={member.email} value={member.email}>{member.name}</option>
-                      ))}
-                    </select>
+                      options={(team || []).map((member) => ({ value: member.email, label: member.name }))}
+                      onChange={(email) => onUpdateDeliverable(deliverable.id, "assignee_email", email)}
+                    />
                   </td>
                 ) : (
                   <AssigneeCell assignee={assignee} />
                 )}
                 <td>
                   {canManageThisRow ? (
-                    <select
-                      className="del-status-sel"
+                    <Dropdown
                       value={deliverable.status}
-                      onChange={(e) => onUpdateDeliverable(deliverable.id, "status", e.target.value)}
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
+                      options={STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
+                      onChange={(val) => onUpdateDeliverable(deliverable.id, "status", val)}
+                    />
                   ) : (
                     <StatusPill status={deliverable.status} />
                   )}

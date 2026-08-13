@@ -21,7 +21,13 @@ function StatCard({ color, iconId, trend, trendClass, target, label, onClick }) 
 }
 
 function KanbanCard({ claim, deliverables, onClick }) {
-  const openDels = deliverables.filter(d => d.claim_id === claim.id && d.status !== 'Completed').length;
+  const claimDels = deliverables.filter(d => d.claim_id === claim.id);
+  const openDels = claimDels.filter(d => d.status !== 'Completed').length;
+  const progress = claimDels.length > 0
+    ? Math.round((claimDels.filter(d => d.status === 'Completed').length / claimDels.length) * 100)
+    : 0;
+  const progressColor = progress === 100 ? 'var(--accent2)' : progress > 0 ? 'var(--accent)' : 'var(--border2)';
+
   return (
     <div className="kanban-card" onClick={onClick}>
       <div className="kanban-card-title">
@@ -41,6 +47,14 @@ function KanbanCard({ claim, deliverables, onClick }) {
           </div>
         )}
       </div>
+      {claimDels.length > 0 && (
+        <div className="kanban-progress-wrap">
+          <div className="kanban-progress-track">
+            <div className="kanban-progress-fill" style={{ width: `${progress}%`, background: progressColor }} />
+          </div>
+          <div className="kanban-progress-label">{progress}% complete</div>
+        </div>
+      )}
       {openDels > 0 && (
         <div style={{ marginTop: 5 }}>
           <span className="status-pill pill-yellow" style={{ fontSize: 9, padding: '2px 6px' }}>

@@ -4,6 +4,7 @@ import ClaimDeliverables from "./ClaimDeliverables.jsx";
 import AddDeliverableForm from "./AddDeliverableForm.jsx";
 import FullClaimPage from "../../pages/FullClaimPage.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
+import Dropdown from "../shared/Dropdown.jsx";
 
 const STATUSES = ['Not Started', 'In Progress', 'Pending Approval', 'On Hold', 'Completed'];
 const DELIVERABLE_TYPES = ['Site Visit', 'Report Writing', 'Photo Documentation', 'Estimate Preparation', 'Client Communication', 'Custom...'];
@@ -71,6 +72,8 @@ export default function ClaimModal({
       <FullClaimPage
         claim={claim}
         team={team}
+        deliverables={dels}
+        onAddDeliverable={onAddDeliverable}
         onBack={() => setShowFullFile(false)}
         onSaveClaim={onUpdateClaim}
         onOpenNewClaim={onOpenNewClaim}
@@ -87,14 +90,11 @@ export default function ClaimModal({
             <div className="modal-field">
               <div className="modal-field-label">Status</div>
               {canManage ? (
-                <select
-                  className="form-select"
-                  style={{ fontSize: 12, padding: '4px 8px' }}
+                <Dropdown
                   value={claim.status}
-                  onChange={(e) => onUpdateClaimStatus(claim.id, e.target.value)}
-                >
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                  options={STATUSES.map(s => ({ value: s, label: s }))}
+                  onChange={(val) => onUpdateClaimStatus(claim.id, val)}
+                />
               ) : (
                 <div className="modal-field-value"><StatusPill status={claim.status} /></div>
               )}
@@ -144,6 +144,22 @@ export default function ClaimModal({
             </div>
 
             <div className="modal-field">
+              <div className="modal-field-label">Progress</div>
+              <div className="modal-field-value">
+                {dels.length > 0 ? (
+                  <div className="table-progress" style={{ maxWidth: 160 }}>
+                    <div className="table-progress-track">
+                      <div className="table-progress-fill" style={{ width: `${progress}%`, background: 'var(--accent)' }} />
+                    </div>
+                    <span className="table-progress-pct">{progress}%</span>
+                  </div>
+                ) : (
+                  <span style={{ color: 'var(--text3)' }}>—</span>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-field">
               <div className="modal-field-label">Flagged</div>
               <div className="modal-field-value">
                 {canManage ? (
@@ -175,9 +191,11 @@ export default function ClaimModal({
             )}
           </div>
 
-          <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7, marginBottom: 18 }}>
-            {claim.description}
-          </p>
+          {claim.description && (
+            <div className="full-desc" style={{ marginBottom: 4 }}>
+              {claim.description}
+            </div>
+          )}
 
           <div className="modal-section-title">
             <span>Deliverables & Task Assignments</span>
@@ -187,7 +205,7 @@ export default function ClaimModal({
           </div>
 
           <ClaimDeliverables
-            deliverables={dels}
+            deliverables={dels.filter((d) => !d.is_calling_task)}
             team={team}
             currentRole={currentRole}
             currentUserEmail={currentUserEmail}
@@ -212,6 +230,19 @@ export default function ClaimModal({
               onAdd={handleAdd}
             />
           )}
+
+          <div className="modal-section-title">
+            <span>Operations</span>
+          </div>
+
+          <ClaimDeliverables
+            deliverables={dels.filter((d) => d.is_calling_task)}
+            team={team}
+            currentRole={currentRole}
+            currentUserEmail={currentUserEmail}
+            onUpdateDeliverable={onUpdateDeliverable}
+            onDeleteDeliverable={onDeleteDeliverable}
+          />
 
           {isManager && (
             <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
