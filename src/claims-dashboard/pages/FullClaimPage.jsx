@@ -123,7 +123,7 @@ function Field({ label, children, span2 }) {
   );
 }
 
-function SectionForm({ sectionType, content, onChange }) {
+function SectionForm({ sectionType, content, onChange, disabled }) {
   const fields = SECTION_FIELDS[sectionType] || [];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px" }}>
@@ -134,6 +134,7 @@ function SectionForm({ sectionType, content, onChange }) {
               className="form-input" rows={3} style={{ resize: "vertical" }}
               placeholder={f.placeholder || ""}
               value={content[f.key] || ""}
+              disabled={disabled}
               onChange={(e) => onChange(f.key, e.target.value)}
             />
           ) : (
@@ -142,6 +143,7 @@ function SectionForm({ sectionType, content, onChange }) {
               className="form-input"
               placeholder={f.placeholder || ""}
               value={content[f.key] || ""}
+              disabled={disabled}
               onChange={(e) => onChange(f.key, e.target.value)}
             />
           )}
@@ -151,7 +153,11 @@ function SectionForm({ sectionType, content, onChange }) {
   );
 }
 
-export default function FullClaimPage({ claim, team, deliverables = [], onAddDeliverable, onBack, onSaveClaim }) {
+export default function FullClaimPage({ claim, team, deliverables = [], currentRole, currentUserEmail, onAddDeliverable, onBack, onSaveClaim }) {
+  const isManager = currentRole === "manager" || currentRole === "director";
+  const isOwner = claim.consultant_email === currentUserEmail || claim.manager_email === currentUserEmail;
+  const canManage = isManager || isOwner;
+
   const [form, setForm] = useState({ ...claim });
   const [engineers, setEngineers] = useState([]);
   const [activeSections, setActiveSections] = useState([]);
@@ -159,6 +165,7 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
   const [activeNavKey, setActiveNavKey] = useState("file_details");
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
     setForm({ ...claim });
@@ -185,47 +192,77 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
   }
 
   function updateField(field, value) {
+    if (!canManage) return;
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   function updateSectionField(sectionId, fieldKey, value) {
+    if (!canManage) return;
     setSectionContent((prev) => ({ ...prev, [sectionId]: { ...(prev[sectionId] || {}), [fieldKey]: value } }));
   }
 
   async function handleSave() {
+    if (!canManage) return;
     setSaving(true);
-    await onSaveClaim(claim.id, form);
+    setSaveError(false);
+    let ok = await onSaveClaim(claim.id, form);
 
-    await supabase.from("claim_engineers").delete().eq("claim_id", claim.id);
+    const { error: engDeleteError } = await supabase.from("claim_engineers").delete().eq("claim_id", claim.id);
+    if (engDeleteError) ok = false;
     if (engineers.length > 0) {
       const payload = engineers.map((e, idx) => ({
         claim_id: claim.id, type: e.type, name: e.name, organization: e.organization,
         engaged_for: e.engaged_for, comments: e.comments, sort_order: idx,
       }));
-      await supabase.from("claim_engineers").insert(payload);
+      const { error: engInsertError } = await supabase.from("claim_engineers").insert(payload);
+      if (engInsertError) ok = false;
     }
     await loadEngineers();
 
     for (const section of activeSections) {
-      await supabase.from("claim_sections").update({ content: sectionContent[section.id] || {} }).eq("id", section.id);
+      const editableKeys = SECTION_FIELDS[section.section_type]?.map((f) => f.key) || [];
+      if (editableKeys.length === 0) continue;
+
+      // merge into the latest content instead of overwriting, so we don't
+      // stomp a progress log entry someone else added while this was open
+      const { data: freshRow, error: fetchError } = await supabase
+        .from("claim_sections").select("content").eq("id", section.id).single();
+      if (fetchError) { ok = false; continue; }
+
+      const freshContent = freshRow?.content || {};
+      const localContent = sectionContent[section.id] || {};
+      const merged = { ...freshContent };
+      for (const key of editableKeys) merged[key] = localContent[key];
+
+      const { error: updateError } = await supabase.from("claim_sections").update({ content: merged }).eq("id", section.id);
+      if (updateError) { ok = false; continue; }
+      setSectionContent((prev) => ({ ...prev, [section.id]: merged }));
     }
 
     setSaving(false);
-    setLastSaved(new Date());
+    if (ok) setLastSaved(new Date());
+    else setSaveError(true);
   }
 
   function addEngineerRow() {
+    if (!canManage) return;
     setEngineers((prev) => [...prev, { type: "", name: "", organization: "", engaged_for: "", comments: "" }]);
   }
   function updateEngineerRow(index, field, value) {
+    if (!canManage) return;
     setEngineers((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: value } : e)));
   }
   function removeEngineerRow(index) {
+    if (!canManage) return;
     setEngineers((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function addSection(sectionKey) {
-    const nextOrder = activeSections.length;
+    if (!canManage) return;
+    // use max(sort_order)+1, not array length — sort_order can drift from position
+    const nextOrder = activeSections.length > 0
+      ? Math.max(...activeSections.map((s) => s.sort_order ?? 0)) + 1
+      : 0;
     const { data, error } = await supabase
       .from("claim_sections").insert([{ claim_id: claim.id, section_type: sectionKey, content: {}, sort_order: nextOrder }]).select();
     if (!error) {
@@ -236,28 +273,82 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
   }
 
   async function removeSection(sectionId) {
+    if (!canManage) return;
     const { error } = await supabase.from("claim_sections").delete().eq("id", sectionId);
     if (!error) setActiveSections((prev) => prev.filter((s) => s.id !== sectionId));
   }
 
   const [callingTaskForms, setCallingTaskForms] = useState({});
   const [progressLogForms, setProgressLogForms] = useState({});
+  const [expandedLogEntries, setExpandedLogEntries] = useState({});
+  const [editingLogEntry, setEditingLogEntry] = useState(null); // { sectionId, entryId }
+  const [logEntryError, setLogEntryError] = useState(false);
+  const [logAddError, setLogAddError] = useState({}); // sectionId -> bool
+  const [pendingLogSave, setPendingLogSave] = useState({}); // sectionId -> content to retry
   const operationsTeam = team.filter((t) => t.is_operations);
+
+  async function persistSectionContent(sectionId, content) {
+    const { error } = await supabase.from("claim_sections").update({ content }).eq("id", sectionId);
+    return !error;
+  }
+
+  function toggleLogEntryExpanded(entryId) {
+    setExpandedLogEntries((prev) => ({ ...prev, [entryId]: !prev[entryId] }));
+  }
+
+  function startEditLogEntry(sectionId, entry) {
+    if (!canManage) return;
+    setLogEntryError(false);
+    setEditingLogEntry({ sectionId, entryId: entry.id });
+    setProgressLogForms((prev) => ({
+      ...prev,
+      [`edit_${entry.id}`]: {
+        desc: entry.description || "",
+        date: entry.target_date || "",
+        percent: entry.percent_complete != null ? String(entry.percent_complete) : "",
+      },
+    }));
+  }
+
+  function cancelEditLogEntry() {
+    setEditingLogEntry(null);
+    setLogEntryError(false);
+  }
+
+  async function saveEditLogEntry(sectionId, entryId) {
+    if (!canManage) return;
+    const form = progressLogForms[`edit_${entryId}`] || {};
+    const ok = await updateProgressLogEntry(sectionId, entryId, {
+      description: form.desc || "",
+      target_date: form.date || "",
+      percent_complete: form.percent ? parseInt(form.percent, 10) : 0,
+    });
+    if (!ok) { setLogEntryError(true); return; }
+    setLogEntryError(false);
+    setEditingLogEntry(null);
+  }
 
   function updateProgressLogForm(sectionId, field, value) {
     setProgressLogForms((prev) => ({ ...prev, [sectionId]: { ...(prev[sectionId] || {}), [field]: value } }));
   }
 
+  function newProgressLogEntryId() {
+    // avoid Date.now() collisions when two entries land in the same ms
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   async function addProgressLogEntry(sectionId) {
+    if (!canManage) return;
     const form = progressLogForms[sectionId] || {};
-    if (!form.desc || !form.updatedBy) return;
+    if (!form.desc) return;
 
     const entry = {
-      id: Date.now().toString(),
+      id: newProgressLogEntryId(),
       description: form.desc,
       target_date: form.date || "",
       percent_complete: form.percent ? parseInt(form.percent, 10) : 0,
-      updated_by_email: form.updatedBy,
+      updated_by_email: currentUserEmail, // real logged-in user, not a free-choice field
       created_at: new Date().toISOString(),
     };
 
@@ -265,10 +356,40 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
     const newLog = [entry, ...existingLog];
     const newContent = { ...(sectionContent[sectionId] || {}), progress_log: newLog };
 
+    // keep this exact payload so Retry resends it instead of building a duplicate
     setSectionContent((prev) => ({ ...prev, [sectionId]: newContent }));
-    setProgressLogForms((prev) => ({ ...prev, [sectionId]: { desc: "", date: "", percent: "", updatedBy: "" } }));
 
-    await supabase.from("claim_sections").update({ content: newContent }).eq("id", sectionId);
+    const ok = await persistSectionContent(sectionId, newContent);
+    if (ok) {
+      setProgressLogForms((prev) => ({ ...prev, [sectionId]: { desc: "", date: "", percent: "" } }));
+      setLogAddError((prev) => ({ ...prev, [sectionId]: false }));
+      setPendingLogSave((prev) => { const next = { ...prev }; delete next[sectionId]; return next; });
+    } else {
+      setLogAddError((prev) => ({ ...prev, [sectionId]: true }));
+      setPendingLogSave((prev) => ({ ...prev, [sectionId]: newContent }));
+    }
+    return ok;
+  }
+
+  async function retryAddProgressLogEntry(sectionId) {
+    const content = pendingLogSave[sectionId];
+    if (!content) return;
+    const ok = await persistSectionContent(sectionId, content);
+    if (ok) {
+      setProgressLogForms((prev) => ({ ...prev, [sectionId]: { desc: "", date: "", percent: "" } }));
+      setLogAddError((prev) => ({ ...prev, [sectionId]: false }));
+      setPendingLogSave((prev) => { const next = { ...prev }; delete next[sectionId]; return next; });
+    }
+  }
+
+  async function updateProgressLogEntry(sectionId, entryId, updatedFields) {
+    if (!canManage) return false;
+    const existingLog = (sectionContent[sectionId]?.progress_log) || [];
+    const newLog = existingLog.map((entry) => (entry.id === entryId ? { ...entry, ...updatedFields } : entry));
+    const newContent = { ...(sectionContent[sectionId] || {}), progress_log: newLog };
+
+    setSectionContent((prev) => ({ ...prev, [sectionId]: newContent }));
+    return await persistSectionContent(sectionId, newContent);
   }
 
   function updateCallingTaskForm(sectionId, field, value) {
@@ -276,6 +397,7 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
   }
 
   function addCallingTask(sectionId) {
+    if (!canManage) return;
     const form = callingTaskForms[sectionId] || {};
     if (!form.desc || !form.assignee) return;
     onAddDeliverable(claim.id, {
@@ -292,16 +414,24 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
   }
 
   async function moveSection(sectionId, direction) {
+    if (!canManage) return;
     const idx = activeSections.findIndex((s) => s.id === sectionId);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= activeSections.length) return;
 
+    // swap the sort_order values, not array indices — indices assume no drift
+    const a = activeSections[idx];
+    const b = activeSections[swapIdx];
+    const aOrder = a.sort_order;
+    const bOrder = b.sort_order;
+
     const reordered = [...activeSections];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    reordered[idx] = { ...b, sort_order: aOrder };
+    reordered[swapIdx] = { ...a, sort_order: bOrder };
     setActiveSections(reordered);
 
-    await supabase.from("claim_sections").update({ sort_order: idx }).eq("id", reordered[idx].id);
-    await supabase.from("claim_sections").update({ sort_order: swapIdx }).eq("id", reordered[swapIdx].id);
+    await supabase.from("claim_sections").update({ sort_order: bOrder }).eq("id", a.id);
+    await supabase.from("claim_sections").update({ sort_order: aOrder }).eq("id", b.id);
   }
 
   function scrollToSection(key) {
@@ -351,14 +481,27 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="status-pill pill-yellow">{form.status}</span>
-          {lastSaved && (
+          {!canManage && (
+            <span className="status-pill pill-gray" title="You can view this file but don't have permission to edit it">
+              View only
+            </span>
+          )}
+          {saveError && (
+            <span style={{ fontSize: 11, color: "var(--danger)", fontWeight: 600 }}>
+              Save failed
+            </span>
+          )}
+          {!saveError && lastSaved && (
             <span style={{ fontSize: 11, color: "var(--text3)" }}>
               Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
-          </button>
+          {/* also doubles as retry — nothing gets cleared on failure */}
+          {canManage && (
+            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : saveError ? "Retry Save" : "Save"}
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={onBack}>Close</button>
         </div>
       </div>
@@ -377,37 +520,39 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {navItem(s.section_type, meta?.label || s.section_type)}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", flexShrink: 0, gap: 1 }}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); moveSection(s.id, "up"); }}
-                    disabled={idx === 0}
-                    title="Move up"
-                    style={{
-                      background: "none", border: "none", padding: 0, lineHeight: 1, fontSize: 9,
-                      cursor: idx === 0 ? "default" : "pointer",
-                      color: idx === 0 ? "var(--border2)" : "var(--text3)",
-                    }}
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); moveSection(s.id, "down"); }}
-                    disabled={idx === activeSections.length - 1}
-                    title="Move down"
-                    style={{
-                      background: "none", border: "none", padding: 0, lineHeight: 1, fontSize: 9,
-                      cursor: idx === activeSections.length - 1 ? "default" : "pointer",
-                      color: idx === activeSections.length - 1 ? "var(--border2)" : "var(--text3)",
-                    }}
-                  >
-                    ▼
-                  </button>
-                </div>
+                {canManage && (
+                  <div style={{ display: "flex", flexDirection: "column", flexShrink: 0, gap: 1 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveSection(s.id, "up"); }}
+                      disabled={idx === 0}
+                      title="Move up"
+                      style={{
+                        background: "none", border: "none", padding: 0, lineHeight: 1, fontSize: 9,
+                        cursor: idx === 0 ? "default" : "pointer",
+                        color: idx === 0 ? "var(--border2)" : "var(--text3)",
+                      }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveSection(s.id, "down"); }}
+                      disabled={idx === activeSections.length - 1}
+                      title="Move down"
+                      style={{
+                        background: "none", border: "none", padding: 0, lineHeight: 1, fontSize: 9,
+                        cursor: idx === activeSections.length - 1 ? "default" : "pointer",
+                        color: idx === activeSections.length - 1 ? "var(--border2)" : "var(--text3)",
+                      }}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
 
-          {availableToAdd.length > 0 && (
+          {canManage && availableToAdd.length > 0 && (
             <>
               <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text3)", letterSpacing: "0.06em", textTransform: "uppercase", padding: "20px 14px 8px" }}>
                 Add sections
@@ -433,27 +578,28 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
           <SectionCard id="section-file_details" title="File Details">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px" }}>
               <Field label="Insured / File Name">
-                <input className="form-input" value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} />
+                <input className="form-input" value={form.name || ""} disabled={!canManage} onChange={(e) => updateField("name", e.target.value)} />
               </Field>
               <Field label="Loss Address">
-                <input className="form-input" value={form.loss_address || form.address || ""} onChange={(e) => updateField("loss_address", e.target.value)} />
+                <input className="form-input" value={form.loss_address || form.address || ""} disabled={!canManage} onChange={(e) => updateField("loss_address", e.target.value)} />
               </Field>
               <Field label="Date of Loss">
-                <input type="date" className="form-input" value={form.date_of_loss || ""} onChange={(e) => updateField("date_of_loss", e.target.value)} />
+                <input type="date" className="form-input" value={form.date_of_loss || ""} disabled={!canManage} onChange={(e) => updateField("date_of_loss", e.target.value)} />
               </Field>
               <Field label="Assignment Date">
-                <input type="date" className="form-input" value={form.assignment_date || ""} onChange={(e) => updateField("assignment_date", e.target.value)} />
+                <input type="date" className="form-input" value={form.assignment_date || ""} disabled={!canManage} onChange={(e) => updateField("assignment_date", e.target.value)} />
               </Field>
               <Field label="GNC File #">
-                <input className="form-input" value={form.gnc || ""} onChange={(e) => updateField("gnc", e.target.value)} />
+                <input className="form-input" value={form.gnc || ""} disabled={!canManage} onChange={(e) => updateField("gnc", e.target.value)} />
               </Field>
               <Field label="Claim #">
-                <input className="form-input" value={form.claim || ""} onChange={(e) => updateField("claim", e.target.value)} />
+                <input className="form-input" value={form.claim || ""} disabled={!canManage} onChange={(e) => updateField("claim", e.target.value)} />
               </Field>
               <Field label="GNC Assigned Manager">
                 <Dropdown
                   value={form.manager_email || ""}
                   placeholder="— None —"
+                  disabled={!canManage}
                   options={team.filter(t => t.role === "manager" || t.role === "director").map(m => ({ value: m.email, label: m.name }))}
                   onChange={(email) => {
                     const m = team.find(t => t.email === email);
@@ -468,6 +614,7 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                 <Dropdown
                   value={form.consultant_email || ""}
                   placeholder="— None —"
+                  disabled={!canManage}
                   options={team.filter(t => t.role === "consultant").map(c => ({ value: c.email, label: c.name }))}
                   onChange={(email) => {
                     const c = team.find(t => t.email === email);
@@ -479,19 +626,22 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                 />
               </Field>
               <Field label="Adjuster Name">
-                <input className="form-input" placeholder="Full name" value={form.adjuster_name || ""} onChange={(e) => updateField("adjuster_name", e.target.value)} />
+                <input className="form-input" placeholder="Full name" value={form.adjuster_name || ""} disabled={!canManage} onChange={(e) => updateField("adjuster_name", e.target.value)} />
               </Field>
               <Field label="Adjuster Company">
-                <input className="form-input" placeholder="Insurance company" value={form.adjuster_company || ""} onChange={(e) => updateField("adjuster_company", e.target.value)} />
+                <input className="form-input" placeholder="Insurance company" value={form.adjuster_company || ""} disabled={!canManage} onChange={(e) => updateField("adjuster_company", e.target.value)} />
               </Field>
               <Field label="Examiner Name">
-                <input className="form-input" placeholder="If applicable" value={form.examiner_name || ""} onChange={(e) => updateField("examiner_name", e.target.value)} />
+                <input className="form-input" placeholder="If applicable" value={form.examiner_name || ""} disabled={!canManage} onChange={(e) => updateField("examiner_name", e.target.value)} />
               </Field>
               <Field label="Examiner Company">
-                <input className="form-input" placeholder="If applicable" value={form.examiner_company || ""} onChange={(e) => updateField("examiner_company", e.target.value)} />
+                <input className="form-input" placeholder="If applicable" value={form.examiner_company || ""} disabled={!canManage} onChange={(e) => updateField("examiner_company", e.target.value)} />
+              </Field>
+              <Field label="OneDrive Link">
+                <input className="form-input" placeholder="https://..." value={form.onedrive_link || ""} disabled={!canManage} onChange={(e) => updateField("onedrive_link", e.target.value)} />
               </Field>
               <Field label="Brief Description" span2>
-                <textarea className="form-input" rows={3} style={{ resize: "vertical" }} value={form.description || ""} onChange={(e) => updateField("description", e.target.value)} />
+                <textarea className="form-input" rows={3} style={{ resize: "vertical" }} value={form.description || ""} disabled={!canManage} onChange={(e) => updateField("description", e.target.value)} />
               </Field>
             </div>
           </SectionCard>
@@ -503,7 +653,7 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                 key={s.id}
                 id={`section-${s.section_type}`}
                 title={meta?.label || s.section_type}
-                onRemove={() => removeSection(s.id)}
+                onRemove={canManage ? () => removeSection(s.id) : undefined}
               >
                 {s.section_type === "engineering_inspection" ? (
                   <>
@@ -518,24 +668,29 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                       <tbody>
                         {engineers.map((e, i) => (
                           <tr key={i}>
-                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Type" value={e.type || ""} onChange={(ev) => updateEngineerRow(i, "type", ev.target.value)} /></td>
-                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Name" value={e.name || ""} onChange={(ev) => updateEngineerRow(i, "name", ev.target.value)} /></td>
-                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Firm" value={e.organization || ""} onChange={(ev) => updateEngineerRow(i, "organization", ev.target.value)} /></td>
-                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Purpose" value={e.engaged_for || ""} onChange={(ev) => updateEngineerRow(i, "engaged_for", ev.target.value)} /></td>
-                            <td style={{ padding: "6px 8px" }}><textarea className="form-input" rows={1} placeholder="Comments..." value={e.comments || ""} onChange={(ev) => updateEngineerRow(i, "comments", ev.target.value)} /></td>
+                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Type" value={e.type || ""} disabled={!canManage} onChange={(ev) => updateEngineerRow(i, "type", ev.target.value)} /></td>
+                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Name" value={e.name || ""} disabled={!canManage} onChange={(ev) => updateEngineerRow(i, "name", ev.target.value)} /></td>
+                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Firm" value={e.organization || ""} disabled={!canManage} onChange={(ev) => updateEngineerRow(i, "organization", ev.target.value)} /></td>
+                            <td style={{ padding: "6px 8px" }}><input className="form-input" placeholder="Purpose" value={e.engaged_for || ""} disabled={!canManage} onChange={(ev) => updateEngineerRow(i, "engaged_for", ev.target.value)} /></td>
+                            <td style={{ padding: "6px 8px" }}><textarea className="form-input" rows={1} placeholder="Comments..." value={e.comments || ""} disabled={!canManage} onChange={(ev) => updateEngineerRow(i, "comments", ev.target.value)} /></td>
                             <td style={{ padding: "6px 8px" }}>
-                              <button onClick={() => removeEngineerRow(i)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer" }}>✕</button>
+                              {canManage && (
+                                <button onClick={() => removeEngineerRow(i)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer" }}>✕</button>
+                              )}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={addEngineerRow}>+ Add Engineer</button>
+                    {canManage && (
+                      <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={addEngineerRow}>+ Add Engineer</button>
+                    )}
                   </>
                 ) : (
                   <SectionForm
                     sectionType={s.section_type}
                     content={sectionContent[s.id] || {}}
+                    disabled={!canManage}
                     onChange={(fieldKey, value) => updateSectionField(s.id, fieldKey, value)}
                   />
                 )}
@@ -566,7 +721,7 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                     </div>
                   )}
 
-                  {operationsTeam.length === 0 ? (
+                  {!canManage ? null : operationsTeam.length === 0 ? (
                     <div style={{ fontSize: 11, color: "var(--warn)" }}>
                       No team members are tagged as Operations yet — tag someone in Admin first.
                     </div>
@@ -611,62 +766,137 @@ export default function FullClaimPage({ claim, team, deliverables = [], onAddDel
                     <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>No progress updates yet.</div>
                   ) : (
                     <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                      {(sectionContent[s.id]?.progress_log || []).map((entry) => (
-                        <div
-                          key={entry.id}
-                          style={{
-                            display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12,
-                            padding: "10px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8,
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.5 }}>{entry.description}</div>
-                            <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 4 }}>
-                              {team.find((m) => m.email === entry.updated_by_email)?.name || "Unknown"}
-                              {entry.target_date && ` · Target: ${entry.target_date}`}
-                              {" · Logged "}
-                              {new Date(entry.created_at).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}
+                      {(sectionContent[s.id]?.progress_log || []).map((entry) => {
+                        const isEditingEntry = editingLogEntry?.sectionId === s.id && editingLogEntry?.entryId === entry.id;
+                        const isExpanded = !!expandedLogEntries[entry.id];
+                        const editForm = progressLogForms[`edit_${entry.id}`] || {};
+
+                        if (isEditingEntry) {
+                          return (
+                            <div
+                              key={entry.id}
+                              style={{
+                                display: "flex", gap: 8, flexWrap: "wrap",
+                                padding: "10px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8,
+                              }}
+                            >
+                              <input
+                                className="form-input" style={{ flex: 2, minWidth: 200 }}
+                                value={editForm.desc || ""}
+                                onChange={(e) => setProgressLogForms((prev) => ({ ...prev, [`edit_${entry.id}`]: { ...editForm, desc: e.target.value } }))}
+                              />
+                              <input
+                                type="date" className="form-input" style={{ flex: 1, minWidth: 130 }}
+                                value={editForm.date || ""}
+                                onChange={(e) => setProgressLogForms((prev) => ({ ...prev, [`edit_${entry.id}`]: { ...editForm, date: e.target.value } }))}
+                              />
+                              <input
+                                type="number" min="0" max="100" className="form-input" placeholder="%" style={{ flex: "0 0 70px" }}
+                                value={editForm.percent || ""}
+                                onChange={(e) => setProgressLogForms((prev) => ({ ...prev, [`edit_${entry.id}`]: { ...editForm, percent: e.target.value } }))}
+                              />
+                              <button className="btn btn-primary btn-sm" onClick={() => saveEditLogEntry(s.id, entry.id)}>
+                                {logEntryError ? "Retry" : "Save"}
+                              </button>
+                              <button className="btn btn-ghost btn-sm" onClick={cancelEditLogEntry}>Cancel</button>
+                              {logEntryError && (
+                                <span style={{ fontSize: 10.5, color: "var(--danger)", alignSelf: "center" }}>
+                                  Failed to save
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={entry.id}
+                            style={{
+                              display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12,
+                              padding: "10px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => toggleLogEntryExpanded(entry.id)}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 12.5, color: "var(--text)", lineHeight: 1.5,
+                                  display: isExpanded ? "block" : "-webkit-box",
+                                  WebkitLineClamp: isExpanded ? "unset" : 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {entry.description}
+                              </div>
+                              <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 4 }}>
+                                {entry.target_date && `Target: ${entry.target_date} · `}
+                                {"Logged "}
+                                {new Date(entry.created_at).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                              <span className="status-pill pill-blue" style={{ fontSize: 10 }}>
+                                {entry.percent_complete}%
+                              </span>
+                              {canManage && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); startEditLogEntry(s.id, entry); }}
+                                  title="Edit"
+                                  style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", padding: 2, display: "flex" }}
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <span
-                            className="status-pill pill-blue"
-                            style={{ fontSize: 10, flexShrink: 0 }}
-                          >
-                            {entry.percent_complete}%
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <input
-                      className="form-input" placeholder="What's the update? (e.g. Sent to insured for review)" style={{ flex: 2, minWidth: 200 }}
-                      value={progressLogForms[s.id]?.desc || ""}
-                      onChange={(e) => updateProgressLogForm(s.id, "desc", e.target.value)}
-                    />
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <Dropdown
-                        value={progressLogForms[s.id]?.updatedBy || ""}
-                        placeholder="Logged by..."
-                        options={team.map((m) => ({ value: m.email, label: m.name }))}
-                        onChange={(val) => updateProgressLogForm(s.id, "updatedBy", val)}
+                  {canManage && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <input
+                        className="form-input" placeholder="What's the update? (e.g. Sent to insured for review)" style={{ flex: 2, minWidth: 200 }}
+                        value={progressLogForms[s.id]?.desc || ""}
+                        onChange={(e) => updateProgressLogForm(s.id, "desc", e.target.value)}
                       />
+                      <input
+                        type="date" className="form-input" style={{ flex: 1, minWidth: 130 }}
+                        title="Target / expected date"
+                        value={progressLogForms[s.id]?.date || ""}
+                        onChange={(e) => updateProgressLogForm(s.id, "date", e.target.value)}
+                      />
+                      <input
+                        type="number" min="0" max="100" className="form-input" placeholder="%" style={{ flex: "0 0 70px" }}
+                        title="Percent complete"
+                        value={progressLogForms[s.id]?.percent || ""}
+                        onChange={(e) => updateProgressLogForm(s.id, "percent", e.target.value)}
+                      />
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={async () => {
+                          const ok = await addProgressLogEntry(s.id);
+                          setLogAddError((prev) => ({ ...prev, [s.id]: ok === false }));
+                        }}
+                      >
+                        + Log Update
+                      </button>
+                      {logAddError[s.id] && (
+                        <>
+                          <span style={{ fontSize: 10.5, color: "var(--danger)" }}>Failed to save</span>
+                          <button className="btn btn-ghost btn-sm" onClick={() => retryAddProgressLogEntry(s.id)}>
+                            Retry
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <input
-                      type="date" className="form-input" style={{ flex: 1, minWidth: 130 }}
-                      title="Target / expected date"
-                      value={progressLogForms[s.id]?.date || ""}
-                      onChange={(e) => updateProgressLogForm(s.id, "date", e.target.value)}
-                    />
-                    <input
-                      type="number" min="0" max="100" className="form-input" placeholder="%" style={{ flex: "0 0 70px" }}
-                      title="Percent complete"
-                      value={progressLogForms[s.id]?.percent || ""}
-                      onChange={(e) => updateProgressLogForm(s.id, "percent", e.target.value)}
-                    />
-                    <button className="btn btn-primary btn-sm" onClick={() => addProgressLogEntry(s.id)}>+ Log Update</button>
-                  </div>
+                  )}
                 </div>
               </SectionCard>
             );

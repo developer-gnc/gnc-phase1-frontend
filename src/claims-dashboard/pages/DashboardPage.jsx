@@ -104,7 +104,7 @@ export default function DashboardPage({ claims, deliverables, currentRole, curre
         <StatCard color="blue" iconId="icon-folder" trend="Total" trendClass="neutral" target={active} label="Active Claim Files" onClick={() => onNavigate('claims')} />
         <StatCard color="green" iconId="icon-check-circle" trend="↑ completed" trendClass="up" target={completed} label="Completed Files" />
         <StatCard color="yellow" iconId="icon-clock" trend="Needs review" trendClass="neutral" target={pending} label="Pending Approval" />
-        <StatCard color="red" iconId="icon-check-list" trend="Needs attention" trendClass="down" target={openTasks} label="Open Tasks" onClick={() => onNavigate('tasks')} />
+        <StatCard color="red" iconId="icon-check-list" trend="Needs attention" trendClass="down" target={openTasks} label="Open Tasks" onClick={() => onNavigate(isManager ? 'tasks' : 'mytasks')} />
       </div>
 
       <div className="section-title">Live Status Board</div>

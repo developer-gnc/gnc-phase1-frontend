@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import DeliverableItem from '../components/shared/DeliverableItem.jsx';
 
-export default function MyTasksPage({ deliverables, claims, currentUser, currentUserEmail, onCycleStatus }) {
+export default function MyTasksPage({ deliverables, claims, team, currentUser, currentRole, currentUserEmail, onCycleStatus, onUpdateDeliverable }) {
   const [activeTab, setActiveTab] = useState('all');
+  const canEdit = currentRole === 'manager' || currentRole === 'director';
 
   const STATUSES = ['Not Started', 'In Progress', 'Pending Approval', 'On Hold', 'Completed'];
   const counts = {};
@@ -72,17 +73,16 @@ export default function MyTasksPage({ deliverables, claims, currentUser, current
           </div>
         ) : myDels.map(d => (
           <DeliverableItem
-  key={d.id}
-  deliverable={d}
-  claims={claims}
-  team={team}
-  showClaim={true}
-  canEdit={canEdit}
-  currentUserEmail={currentUserEmail}
-  onCycleStatus={onCycleStatus}
-  onUpdateDeliverable={onUpdateDeliverable}
-  onDelete={onDelete}
-/>
+            key={d.id}
+            deliverable={d}
+            claims={claims}
+            team={team}
+            showClaim={true}
+            canEdit={canEdit}
+            currentUserEmail={currentUserEmail}
+            onCycleStatus={onCycleStatus}
+            onUpdateDeliverable={onUpdateDeliverable}
+          />
         ))}
       </div>
     </div>

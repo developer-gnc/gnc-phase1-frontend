@@ -1,13 +1,23 @@
 const DATE_SUFFIX = 'T12:00:00';
+const CLAIM_TIMEZONE = 'America/Edmonton';
+
+function timezoneTodayDate(timeZone) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone }); // YYYY-MM-DD
+  return new Date(todayStr + DATE_SUFFIX);
+}
+
+export function canadaTimeZoneAbbr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: CLAIM_TIMEZONE, timeZoneName: 'short' }).formatToParts(date);
+  return parts.find(p => p.type === 'timeZoneName')?.value || 'MT';
+}
 
 function parseDateInfo(dateStr) {
   if (!dateStr) return { canadaTime: '—', due: null };
   const d = new Date(dateStr + DATE_SUFFIX);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const diff = Math.round((d - now) / 86400000);
+  const today = timezoneTodayDate(CLAIM_TIMEZONE);
+  const diff = Math.round((d - today) / 86400000);
   const canadaTime = d.toLocaleString('en-CA', {
-    timeZone: 'America/Edmonton',
+    timeZone: CLAIM_TIMEZONE,
     month: 'short',
     day: 'numeric',
     year: 'numeric',

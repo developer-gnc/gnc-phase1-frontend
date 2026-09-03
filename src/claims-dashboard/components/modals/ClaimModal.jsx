@@ -5,6 +5,7 @@ import AddDeliverableForm from "./AddDeliverableForm.jsx";
 import FullClaimPage from "../../pages/FullClaimPage.jsx";
 import { StatusPill } from "../shared/StatusPill.jsx";
 import Dropdown from "../shared/Dropdown.jsx";
+import { canadaTimeZoneAbbr } from "../../utils/index.js";
 
 const STATUSES = ['Not Started', 'In Progress', 'Pending Approval', 'On Hold', 'Completed'];
 const DELIVERABLE_TYPES = ['Site Visit', 'Report Writing', 'Photo Documentation', 'Estimate Preparation', 'Client Communication', 'Custom...'];
@@ -43,7 +44,10 @@ export default function ClaimModal({
       setShowFullFile(false);
       setConfirmDelete(false);
     }
-  }, [claim]);
+    // keyed on id, not the claim object — a new object on every save was
+    // kicking us out of Full File
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claim?.id]);
 
   if (!claim) return null;
 
@@ -73,6 +77,8 @@ export default function ClaimModal({
         claim={claim}
         team={team}
         deliverables={dels}
+        currentRole={currentRole}
+        currentUserEmail={currentUserEmail}
         onAddDeliverable={onAddDeliverable}
         onBack={() => setShowFullFile(false)}
         onSaveClaim={onUpdateClaim}
@@ -200,12 +206,12 @@ export default function ClaimModal({
           <div className="modal-section-title">
             <span>Deliverables & Task Assignments</span>
             <span className="canada-time-badge">
-            Due dates in Canada Timezone (MDT)
+            Due dates in Canada Timezone ({canadaTimeZoneAbbr()})
             </span>
           </div>
 
           <ClaimDeliverables
-            deliverables={dels.filter((d) => !d.is_calling_task)}
+            deliverables={dels}
             team={team}
             currentRole={currentRole}
             currentUserEmail={currentUserEmail}
@@ -230,19 +236,6 @@ export default function ClaimModal({
               onAdd={handleAdd}
             />
           )}
-
-          <div className="modal-section-title">
-            <span>Operations</span>
-          </div>
-
-          <ClaimDeliverables
-            deliverables={dels.filter((d) => d.is_calling_task)}
-            team={team}
-            currentRole={currentRole}
-            currentUserEmail={currentUserEmail}
-            onUpdateDeliverable={onUpdateDeliverable}
-            onDeleteDeliverable={onDeleteDeliverable}
-          />
 
           {isManager && (
             <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
