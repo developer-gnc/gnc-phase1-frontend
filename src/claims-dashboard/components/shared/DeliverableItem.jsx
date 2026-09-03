@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { formatDue, canadaTimeStr } from '../../utils/index.js';
+import { formatDue, canadaTimeStr, canadaTimeZoneAbbr } from '../../utils/index.js';
 import { PriorityBadge } from './StatusPill.jsx';
 
 const STATUS_META = {
@@ -142,7 +142,7 @@ export default function DeliverableItem({ deliverable: d, claims, team, showClai
             </span>
           )}
           {canadaTime && (
-            <span className="canada-time-badge">{canadaTime} MDT</span>
+            <span className="canada-time-badge">{canadaTime} {canadaTimeZoneAbbr()}</span>
           )}
           {due && due.overdue && (
             <span style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>{due.text}</span>
@@ -170,7 +170,7 @@ export default function DeliverableItem({ deliverable: d, claims, team, showClai
           }}>
             {assignee.initials}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text2)' }}>{assignee.name.split(' ')[0]}</span>
+          <span style={{ fontSize: 12, color: 'var(--text2)' }}>{assignee.name?.split(' ')[0] || ''}</span>
         </div>
       )}
 

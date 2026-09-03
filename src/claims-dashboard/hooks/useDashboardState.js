@@ -123,7 +123,7 @@
     const { data: inserted, error } = await supabase.from('deliverables').insert([payload]).select();
     if (error) {
       console.error('Failed to add deliverable:', error);
-      return;
+      return false;
     }
 
     setDeliverables((prev) => [...prev, inserted[0]]);
@@ -131,11 +131,12 @@
     await supabase.from('claims').update({ last_updated: timestamp }).eq('id', claimId);
     setClaims((prev) => prev.map((c) => c.id === claimId ? { ...c, last_updated: timestamp } : c));
     setModalClaim((prev) => prev && prev.id === claimId ? { ...prev, last_updated: timestamp } : prev);
+    return true;
   }
 
     async function handleUpdateDeliverable(id, field, value) {
       const { error } = await supabase.from('deliverables').update({ [field]: value }).eq('id', id);
-      if (error) { console.error('Failed to update deliverable:', error); return; }
+      if (error) { console.error('Failed to update deliverable:', error); return false; }
 
       setDeliverables((prev) => prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)));
 
@@ -146,6 +147,7 @@
         setClaims((prev) => prev.map((c) => c.id === del.claim_id ? { ...c, last_updated: timestamp } : c));
         setModalClaim((prev) => prev && prev.id === del.claim_id ? { ...prev, last_updated: timestamp } : prev);
       }
+      return true;
     }
 
     async function handleDeleteDeliverable(id) {
@@ -190,13 +192,16 @@ async function handleRoleChangeAdmin(email, newRole) {
 
     async function handleUpdateClaim(claimId, updatedFields) {
     const timestamp = getTimestamp();
-    const payload = { ...updatedFields, last_updated: timestamp };
+    // drop id/created_at — Supabase rejects writes to identity columns
+    const { id: _id, created_at: _created_at, ...safeFields } = updatedFields;
+    const payload = { ...safeFields, last_updated: timestamp };
 
     const { error } = await supabase.from('claims').update(payload).eq('id', claimId);
-    if (error) { console.error('Failed to update claim:', error); return; }
+    if (error) { console.error('Failed to update claim:', error); return false; }
 
     setClaims((prev) => prev.map((c) => c.id === claimId ? { ...c, ...payload } : c));
     setModalClaim((prev) => prev && prev.id === claimId ? { ...prev, ...payload } : prev);
+    return true;
   }
 
     return {

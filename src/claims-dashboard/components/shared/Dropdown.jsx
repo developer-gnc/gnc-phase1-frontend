@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 
-export default function Dropdown({ value, options, onChange, placeholder = "Select..." }) {
+export default function Dropdown({ value, options, onChange, placeholder = "Select...", disabled = false }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef(null);
@@ -34,6 +34,7 @@ export default function Dropdown({ value, options, onChange, placeholder = "Sele
   const ESTIMATED_LIST_HEIGHT = 260;
 
   function openDropdown() {
+    if (disabled) return;
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
@@ -59,6 +60,7 @@ export default function Dropdown({ value, options, onChange, placeholder = "Sele
         style={{
           background: "var(--white)", border: "1px solid var(--border2)", borderRadius: 8,
           padding: "7px 10px", fontSize: 12.5, justifyContent: "space-between", width: "100%",
+          opacity: disabled ? 0.6 : 1, cursor: disabled ? "default" : "pointer",
         }}
         onClick={openDropdown}
       >

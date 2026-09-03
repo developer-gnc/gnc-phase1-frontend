@@ -87,10 +87,10 @@ export default function App({ loggedInUser, onLogout }) {
             />
           )}
           {activePage === 'mytasks' && <MyTasksPage {...pageProps} />}
-          {activePage === 'tasks' && (
+          {activePage === 'tasks' && isManager && (
             <AllTasksPage {...pageProps} claims={claims} onDelete={handleDeleteDeliverable} />
           )}
-          {activePage === 'admin' && (
+          {activePage === 'admin' && isManager && (
             <AdminPage team={team} onRoleChange={handleRoleChangeAdmin} onOperationsToggle={handleOperationsToggleAdmin} />
           )}
           {activePage === 'reports' && <ReportsPage />}

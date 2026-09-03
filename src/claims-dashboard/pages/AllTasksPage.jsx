@@ -26,7 +26,7 @@ export default function AllTasksPage({ claims, deliverables, team, currentRole, 
   let filtered = [...deliverables];
   if (search) filtered = filtered.filter(d => {
     const claim = claims.find(c => c.id === d.claim_id);
-    return d.name.toLowerCase().includes(search) || (claim?.name.toLowerCase().includes(search));
+    return d.name?.toLowerCase().includes(search) || claim?.name?.toLowerCase().includes(search);
   });
   if (statusFilter !== 'all') filtered = filtered.filter(d => d.status === statusFilter);
   if (personFilter !== 'all') filtered = filtered.filter(d => d.assignee_email === personFilter);
