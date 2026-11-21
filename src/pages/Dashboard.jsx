@@ -45,6 +45,12 @@ function Dashboard({ user, onLogout }) {
                 >
                   Hiring Interviews
                 </Link>
+                <Link
+                  to="/cost-audit"
+                  className="text-gray-400 hover:text-white font-medium transition-colors"
+                >
+                  Cost Audit
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -209,6 +215,37 @@ function Dashboard({ user, onLogout }) {
               <p className="text-gray-400 text-sm">
                 Invite shortlisted candidates, then review their interviews and
                 rankings
+              </p>
+            </motion.div>
+          </Link>
+
+          {/* Cost Audit Tool */}
+          <Link to="/cost-audit">
+            <motion.div
+              whileHover={{ scale: 1.03, y: -5 }}
+              whileTap={{ scale: 0.98 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 hover:border-zinc-700 transition-all cursor-pointer shadow-xl"
+            >
+              <div className="flex items-center justify-center w-16 h-16 bg-zinc-800 rounded-xl mb-6">
+                <svg
+                  className="w-8 h-8 text-sky-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">
+                Cost Audit
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Drop in a contractor&apos;s estimate or T&amp;M invoice and get GNC&apos;s audit workbook
               </p>
             </motion.div>
           </Link>

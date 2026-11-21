@@ -8,6 +8,7 @@ import InvoiceExtractor from './pages/InvoiceExtractor';
 import UnitRateExtractor from './pages/UnitRateExtractor';
 import ClaimsDashboardApp from './claims-dashboard/ClaimsDashboardApp.jsx';
 import HiringInterviews from './pages/HiringInterviews';
+import CostAudit from './pages/CostAudit';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -98,6 +99,10 @@ useEffect(() => {
       <Route 
         path="/hiring" 
         element={user ? <HiringInterviews user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
+      />
+      <Route 
+        path="/cost-audit" 
+        element={user ? <CostAudit user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
       />
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
     </Routes>
