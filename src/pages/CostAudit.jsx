@@ -73,6 +73,14 @@ function CostAudit({ user, onLogout }) {
   const [claim, setClaim] = useState('');
   const [title, setTitle] = useState('');
   const [emergencyEnd, setEmergencyEnd] = useState('');
+  // Additional information: what the consultant knows that isn't on the bills. The audit server doesn't
+  // guess these; it asks (r.questions) and applies the answers when the audit is run again.
+  const [siteClose, setSiteClose] = useState('');
+  const [otApproved, setOtApproved] = useState('');
+  const [notOnSite, setNotOnSite] = useState('');
+  const [notCovered, setNotCovered] = useState('');
+  const [alreadyBilled, setAlreadyBilled] = useState('');
+  const extraRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState([]);
@@ -106,6 +114,11 @@ function CostAudit({ user, onLogout }) {
     fd.append('claim', claim);
     fd.append('title', title);
     fd.append('emergency_end', emergencyEnd);
+    fd.append('site_close', siteClose);
+    fd.append('ot_approved', otApproved);
+    fd.append('not_on_site', notOnSite);
+    fd.append('not_covered', notCovered);
+    fd.append('already_billed', alreadyBilled);
     setBusy(true);
     try {
       const res = await call('/api/audit', { method: 'POST', body: fd });
@@ -233,6 +246,62 @@ function CostAudit({ user, onLogout }) {
             </label>
           </div>
 
+          <div ref={extraRef} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+            <div>
+              <p className="text-white font-semibold">4. Additional information (optional)</p>
+              <p className="text-gray-400 text-sm">
+                What you know that isn&apos;t on the bills (site records, the policy, other bills). The tool
+                doesn&apos;t guess these: it asks after the audit, and applies what you enter here when you run it
+                again.
+              </p>
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-white font-semibold text-sm">Site accessible until</span>
+                <input
+                  value={siteClose}
+                  onChange={(e) => setSiteClose(e.target.value)}
+                  placeholder="e.g. 4:30 PM"
+                  className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white placeholder-gray-500"
+                />
+                <span className="text-gray-500 text-xs">Hours on the time sheets after this time are cut.</span>
+              </label>
+              <label className="block">
+                <span className="text-white font-semibold text-sm">After-hours work approved?</span>
+                <select
+                  value={otApproved}
+                  onChange={(e) => setOtApproved(e.target.value)}
+                  className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                >
+                  <option value="">Not known: ask me</option>
+                  <option value="yes">Yes: keep OT rates</option>
+                  <option value="no">No: pay OT at the regular rate</option>
+                </select>
+              </label>
+            </div>
+            {[
+              ['Not on site (per site records)',
+                'One per line: date - worker, role or equipment. e.g. Aug 26, 2025 - Mehdi Nomiri, or 2025-09-18 - dehumidifier',
+                notOnSite, setNotOnSite, 3],
+              ['Not covered by the policy', 'One item per line, using words from the bill. e.g. appraisal',
+                notCovered, setNotCovered, 2],
+              ['Already included in another bill',
+                'One per line: item - where it is already billed. e.g. floor prep - NuFloor invoice',
+                alreadyBilled, setAlreadyBilled, 2],
+            ].map(([label, hint, value, set, rows]) => (
+              <label key={label} className="block">
+                <span className="text-white font-semibold text-sm">{label}</span>
+                <span className="block text-gray-500 text-xs">{hint}</span>
+                <textarea
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                  rows={rows}
+                  className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                />
+              </label>
+            ))}
+          </div>
+
           <div className="flex items-center gap-4">
             <button
               type="submit"
@@ -271,6 +340,23 @@ function CostAudit({ user, onLogout }) {
               ))}
             </div>
             <p className="text-gray-500 text-xs mb-4">Amounts before O&amp;P and tax.</p>
+            {r.questions?.length > 0 && (
+              <div className="bg-sky-950 border border-sky-800 rounded-xl p-4 mb-4">
+                <p className="text-sky-200 font-semibold text-sm">
+                  Questions for you{' '}
+                  <button
+                    type="button"
+                    onClick={() => extraRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    className="font-normal text-sky-300 underline"
+                  >
+                    Answer under Additional information and run the audit again
+                  </button>
+                </p>
+                <ul className="list-disc pl-5 text-sky-100 text-sm mt-1 space-y-1">
+                  {r.questions.map((q, j) => <li key={j}>{q}</li>)}
+                </ul>
+              </div>
+            )}
             {r.needs?.length > 0 && (
               <div className="bg-amber-950 border border-amber-800 rounded-xl p-4 mb-4">
                 <p className="text-amber-200 font-semibold text-sm">Needs a person</p>
